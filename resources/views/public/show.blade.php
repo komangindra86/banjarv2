@@ -1,0 +1,16 @@
+@extends('layouts.public')
+@section('content')
+<article class="public-article">
+<header class="article-head"><a href="/{{ $type }}" class="back-link">← {{ $definition['label'] }}</a><div><span class="eyebrow plain">{{ $definition['label'] }}</span></div><h1>{{ $item->title }}</h1>
+<p class="article-meta">@if($type === 'pengurus'){{ $item->position }} · @endif{{ \Carbon\Carbon::parse($item->published_at)->timezone('Asia/Makassar')->translatedFormat('d F Y') }} · {{ $currentBanjar->name }}</p><x-ornament /></header>
+@if($type === 'pengumuman' && $item->expires_at && $item->expires_at <= now())<div class="notice">Masa berlaku pengumuman ini telah berakhir. Informasi disimpan sebagai riwayat.</div>@endif
+@if($type === 'agenda')<div class="event-facts"><div><span>Waktu</span><strong>{{ \Carbon\Carbon::parse($item->starts_at)->timezone('Asia/Makassar')->translatedFormat('l, d F Y') }}</strong><p>{{ \Carbon\Carbon::parse($item->starts_at)->timezone('Asia/Makassar')->format('H:i') }} WITA @if($item->ends_at)· sampai {{ \Carbon\Carbon::parse($item->ends_at)->timezone('Asia/Makassar')->translatedFormat('d M Y, H:i') }} WITA @endif</p></div>@if($item->location)<div><span>Tempat</span><strong>{{ $item->location }}</strong></div>@endif</div>@endif
+@if($photo = $publicContent->image($item->media_id))<img class="article-photo wide-media" src="{{ $photo }}" alt="{{ $item->title }}" width="1040" height="640">@endif
+@if($item->body)<div class="prose-text lead">{{ $item->body }}</div>@endif
+@if($type === 'layanan')<div class="service-steps">@foreach(['requirements'=>'Persyaratan', 'procedure'=>'Prosedur', 'contact'=>'Kontak layanan'] as $key=>$heading)@if($item->$key)<section><h2>{{ $heading }}</h2><div class="prose-text">{{ $item->$key }}</div></section>@endif @endforeach</div>@endif
+@if($type === 'layanan' && $item->letters_enabled && app(\App\Platform\Modules\ModuleGate::class)->allows('ADMINISTRATION') && app(\App\Platform\Modules\ModuleGate::class)->allows('KRAMA'))<div class="article-cta"><a class="button" href="/portal/layanan/{{ $item->id }}/ajukan">Ajukan sekarang</a><p class="help">Masuk dengan akun krama yang telah terhubung ke data Banjar.</p></div>@endif
+@if($related || $document)<div class="article-actions">@if($related)<a class="button-secondary" href="/agenda/{{ $related->slug }}">Lihat agenda: {{ $related->title }}</a>@endif @if($document)<a class="button" href="/media/{{ $document->id }}">Unduh dokumen · {{ number_format($document->size / 1024, 0, ',', '.') }} KB</a>@endif</div>@endif
+@if($photos->isNotEmpty())<div class="gallery-grid">@foreach($photos as $photo)@if($image = $publicContent->image($photo->media_id))<figure><a href="{{ $image }}"><img src="{{ $image }}" alt="{{ $photo->caption ?? $item->title.' — foto '.$loop->iteration }}" loading="lazy" width="640" height="480"></a>@if($photo->caption)<figcaption>{{ $photo->caption }}</figcaption>@endif</figure>@endif @endforeach</div>@endif
+<div class="share-panel"><div><h2>Bagikan informasi ini</h2><p>Kirim tautan resmi ke grup WhatsApp krama.</p></div><a class="button" href="https://wa.me/?text={{ rawurlencode($item->title.' — '.$canonical) }}" target="_blank" rel="noopener noreferrer">Bagikan ke WhatsApp</a></div>
+</article>
+@endsection

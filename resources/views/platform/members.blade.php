@@ -1,0 +1,11 @@
+@extends('layouts.app')
+@section('title', 'Akses pengurus')
+@section('content')
+<a class="back-link" href="/platform/banjars/{{ $banjar->id }}">← {{ $banjar->name }}</a><div class="page-heading"><div><h1>Akses pengurus</h1><p class="muted mt-3">Tentukan peran dan akses pengurus {{ $banjar->name }}.</p></div></div>
+<div class="card-grid mb-8">@foreach($members as $member)<section class="card"><h2>{{ $member->name }}</h2><p class="muted break-all">{{ $member->email }}</p><form class="form-stack mt-5" method="post" action="/platform/banjars/{{ $banjar->id }}/members/{{ $member->id }}">@csrf @method('PATCH')<label>Peran<select name="role_id">@foreach($roles as $role)<option value="{{ $role->id }}" @selected($member->role_id === $role->id)>{{ $role->name }}</option>@endforeach</select></label><label>Akses<select name="status"><option value="ACTIVE" @selected($member->status === 'ACTIVE')>Aktif</option><option value="INACTIVE" @selected($member->status === 'INACTIVE')>Nonaktif</option></select></label>@include('platform.scope-fields', ['scopeMember' => $member])<button class="button-secondary">Simpan akses</button></form></section>@endforeach</div>{{ $members->links() }}
+<section class="card form-width mt-8"><h2>Tambah pengurus</h2><p class="muted mt-2 mb-5">Buat akun baru dengan email pengurus yang belum terdaftar.</p><form class="form-stack" method="post" action="/platform/banjars/{{ $banjar->id }}/members">@csrf
+<label>Nama<input name="name" value="{{ old('name') }}" required maxlength="150"></label><label>Email<input name="email" type="email" value="{{ old('email') }}" required maxlength="255"></label>
+<label>Peran<select name="role_id">@foreach($roles as $role)<option value="{{ $role->id }}" @selected(old('role_id') == $role->id)>{{ $role->name }}</option>@endforeach</select></label>
+@include('platform.scope-fields', ['scopeMember' => null])<label>Kata sandi awal<input name="password" type="password" required minlength="12" autocomplete="new-password"><span class="help">Minimal 12 karakter, mengandung huruf dan angka.</span></label><label>Ulangi kata sandi<input name="password_confirmation" type="password" required minlength="12" autocomplete="new-password"></label><button class="button">Tambah pengurus</button></form></section>
+@endsection
+

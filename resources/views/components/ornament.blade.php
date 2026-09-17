@@ -1,0 +1,2 @@
+{{-- Original four-petal motif; decorative only. --}}
+<div {{ $attributes->class(['ornament']) }} aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M12 2.5c1.6 2.6 1.6 5.4 0 8-1.6-2.6-1.6-5.4 0-8ZM12 21.5c-1.6-2.6-1.6-5.4 0-8 1.6 2.6 1.6 5.4 0 8ZM2.5 12c2.6-1.6 5.4-1.6 8 0-2.6 1.6-5.4 1.6-8 0ZM21.5 12c-2.6 1.6-5.4 1.6-8 0 2.6-1.6 5.4-1.6 8 0Z"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg></div>
