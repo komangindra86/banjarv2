@@ -4,7 +4,7 @@
 <div class="page-heading"><div><span class="eyebrow">BALI SANTIH</span><h1>Rekonsiliasi QRIS</h1><p class="muted">Periksa penerimaan, biaya, dan bukti settlement sebelum dana tersedia.</p></div></div>
 <div class="notice">
 @if($run)
-Pemeriksaan terakhir: {{ $run->started_at }} UTC · {{ $run->checked }} diperiksa · {{ $run->failed }} perlu dicoba lagi. @if(!$run->finished_at)Proses belum selesai.@endif
+Pemeriksaan terakhir: {{ \Carbon\Carbon::parse($run->started_at)->timezone('Asia/Makassar')->translatedFormat('d M Y, H:i') }} WITA · {{ $run->checked }} diperiksa · {{ $run->failed }} perlu dicoba lagi. @if(!$run->finished_at)Proses belum selesai.@endif
 @else
 Belum ada rekonsiliasi terjadwal.
 @endif

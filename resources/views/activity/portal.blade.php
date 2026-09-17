@@ -1,6 +1,7 @@
 @extends('layouts.app')
 @section('title', 'Kegiatan saya')
 @section('content')
+<a href="/portal/beranda" class="back-link">← Beranda</a>
 <div class="page-heading"><div><span class="eyebrow">AKTIVITAS</span><h1>Kegiatan saya</h1><p class="muted">Kegiatan Banjar yang mencatat kehadiran Anda atau KK Anda.</p></div></div>
 @if(!$self)<div class="card empty-state"><h2>Akun belum terhubung</h2><p class="muted">Hubungi Admin Banjar agar akun dihubungkan ke data krama Anda.</p></div>@else
 <div class="grid gap-3">@forelse($rows as $r)@php $at = \Carbon\Carbon::parse($r->starts_at)->timezone('Asia/Makassar'); $end = \Carbon\Carbon::parse($r->ends_at ?? \Carbon\Carbon::parse($r->starts_at)->addHours(6)); @endphp

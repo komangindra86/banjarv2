@@ -42,6 +42,11 @@ final class RoleSeeder extends Seeder
             $roles[$code][2][] = 'attendance.verify';
         }
         $roles['KRAMA'][2][] = 'activity.self';
+        // Fase 9: aset. Penghapusan resmi dibatasi Admin Banjar; Petengen mengelola inventaris harian.
+        foreach (['ADMIN_BANJAR', 'PETENGEN'] as $code) {
+            array_push($roles[$code][2], 'asset.view', 'asset.manage');
+        }
+        $roles['ADMIN_BANJAR'][2][] = 'asset.dispose';
         foreach ($roles as $code => [$name, $scope, $permissions]) {
             DB::table('roles')->updateOrInsert(['code' => $code], compact('name', 'scope'));
             $role = DB::table('roles')->where('code', $code)->value('id');

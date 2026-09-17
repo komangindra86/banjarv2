@@ -18,6 +18,7 @@
         if ($isPlatform) { $nav = [['/platform', 'Banjar'], ['/platform/payments', 'QRIS'], ['/platform/withdrawals', 'Pencairan'], ['/platform/audit', 'Audit']]; }
         else {
             $nav[] = ['/admin', 'Beranda'];
+            if ($gate->allows('KRAMA') && $access->tenant($signedUser, 'krama.self')) { $nav[] = ['/portal/beranda', 'Portal']; }
             if ($gate->allows('PAYMENT') && $gate->allows('FINANCE') && $gate->allows('KRAMA')) {
                 if ($access->tenant($signedUser, 'payment.view')) { $nav[] = ['/admin/payments', 'Dana QRIS']; }
                 elseif ($access->tenant($signedUser, 'payment.self')) { $nav[] = ['/payments', 'Tagihan & QRIS']; }
@@ -27,6 +28,7 @@
                 if ($access->tenant($signedUser, 'letter.view')) { $nav[] = ['/admin/letters', 'Surat']; }
                 elseif ($access->tenant($signedUser, 'letter.submit')) { $nav[] = ['/portal', 'Surat saya']; }
             }
+            if ($gate->allows('ASSET') && $access->tenant($signedUser, 'asset.view')) { $nav[] = ['/admin/assets', 'Aset']; }
             if ($gate->allows('KRAMA') && $access->tenant($signedUser, 'krama.view')) { $nav[] = ['/admin/krama', 'Krama']; }
             elseif ($gate->allows('KRAMA') && $access->tenant($signedUser, 'krama.self')) { $nav[] = ['/admin/krama/mine', 'Data saya']; }
             if ($access->tenant($signedUser, 'website.manage') && $gate->allows('WEBSITE')) { $nav[] = ['/admin/website', 'Konten']; }
@@ -42,7 +44,7 @@
     <a class="brand" href="{{ $signedUser ? ($isPlatform ? '/platform' : '/admin') : '/login' }}"><span class="brand-mark" aria-hidden="true">B</span><span>{{ $currentBanjar->name ?? 'Bali Santih' }}<small>{{ $isPlatform ? 'Pusat pengelolaan Banjar' : 'Banjar Digital' }}</small></span></a>
     @if($signedUser)<form action="/logout" method="post">@csrf<button class="button-quiet" type="submit">Keluar</button></form>@else<span class="eyebrow hidden sm:block">DEKAT DENGAN BANJAR</span>@endif
 </div></header>
-@if($nav)<nav class="navigation" aria-label="Navigasi utama"><div>@foreach($nav as [$url, $label])<a href="{{ $url }}" @if(request()->getPathInfo() === $url || ($url !== '/admin' && $url !== '/platform' && str_starts_with(request()->getPathInfo(), $url.'/')) || ($url === '/admin/website' && request()->is('admin/content/*')) || ($url === '/admin/payments' && request()->is('admin/withdrawals', 'admin/withdrawals/*'))) aria-current="page" @endif><x-icon :name="match($label) { 'Konten' => 'news', 'Kegiatan' => 'calendar', 'Website' => 'settings', 'Audit' => 'history', 'Keuangan' => 'wallet', 'Kegiatan saya' => 'calendar', 'Banjar' => 'profile', 'Pencairan', 'Dana QRIS' => 'wallet', default => 'home' }" /><span>{{ $label }}</span></a>@endforeach</div></nav>@endif
+@if($nav)<nav class="navigation" aria-label="Navigasi utama"><div>@foreach($nav as [$url, $label])<a href="{{ $url }}" @if(request()->getPathInfo() === $url || ($url !== '/admin' && $url !== '/platform' && $url !== '/portal' && str_starts_with(request()->getPathInfo(), $url.'/')) || ($url === '/portal' && str_starts_with(request()->getPathInfo(), '/portal/') && ! request()->is('portal/beranda')) || ($url === '/admin/website' && request()->is('admin/content/*')) || ($url === '/admin/payments' && request()->is('admin/withdrawals', 'admin/withdrawals/*'))) aria-current="page" @endif><x-icon :name="match($label) { 'Konten' => 'news', 'Kegiatan' => 'calendar', 'Website' => 'settings', 'Audit' => 'history', 'Keuangan' => 'wallet', 'Aset' => 'box', 'Kegiatan saya' => 'calendar', 'Banjar' => 'profile', 'Pencairan', 'Dana QRIS' => 'wallet', default => 'home' }" /><span>{{ $label }}</span></a>@endforeach</div></nav>@endif
 <main id="main" class="page">
     @if(session('success'))<div class="notice" role="status">{{ session('success') }}</div>@endif
     @if($errors->any())<div class="error-box" role="alert"><strong>Periksa kembali isian berikut.</strong><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif

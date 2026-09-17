@@ -45,7 +45,7 @@ certbot renew --cert-name banjar.balisantih.com --dry-run --no-random-sleep-on-r
 
 ## Akun Super Admin
 
-Seeder produksi hanya menyiapkan katalog role; tidak membuat akun atau password bawaan. Buat akun pertama setelah pemilik menentukan email. Jalankan secara interaktif dari VPS:
+Seeder produksi hanya menyiapkan katalog role; tidak membuat akun atau password bawaan. Akun Super Admin pertama sudah dibuat sesuai email yang ditentukan pemilik, dan login serta logout berhasil diverifikasi. Untuk membuat akun tambahan, jalankan secara interaktif dari VPS:
 
 ```bash
 cd /var/www/banjarv2/current
@@ -56,7 +56,7 @@ Perintah meminta password secara tersembunyi. Jangan menyalin credential demo lo
 
 ## Verifikasi dan operasi
 
-Pada deployment pertama: 125 tes PHP / 1.259 assertions, 4 tes PWA, Pint, dan build Vite lokal lolos. Semua migrasi dan cache produksi berhasil. `/login` dan `/up` mengembalikan 200, aset CSS/JS 200, `.env` 403, jalur privat yang diuji 404. Browser menampilkan formulir Super Admin tanpa error console. Simulasi renewal SSL berhasil. Login dengan akun asli belum diuji saat catatan ini dibuat karena email akun belum ditentukan.
+Pada deployment pertama: 125 tes PHP / 1.259 assertions, 4 tes PWA, Pint, dan build Vite lokal lolos. Semua migrasi dan cache produksi berhasil. `/login` dan `/up` mengembalikan 200, aset CSS/JS 200, `.env` 403, jalur privat yang diuji 404. Browser menampilkan formulir Super Admin tanpa error console. Simulasi renewal SSL berhasil. Login Super Admin berhasil membuka dashboard `/platform`; logout dan penolakan akses dashboard setelah logout juga sudah diverifikasi.
 
 ```bash
 systemctl status banjarv2-queue.service banjarv2-scheduler.timer

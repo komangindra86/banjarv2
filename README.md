@@ -2,7 +2,7 @@
 
 Super Admin produksi: https://banjar.balisantih.com. Detail layanan VPS, SSL, dan operasi tersedia di [catatan deployment](docs/DEPLOYMENT.md).
 
-Platform multi-Banjar PT Bali Santih Digital. **Fase 1–8 selesai**: fondasi multi-tenant, autentikasi/izin, audit, PWA dasar, admin mobile, website publik, KK/krama, unit organisasi, pengajuan perubahan data, administrasi surat dan arsip PDF privat, serta kas, iuran, dedosan, pelunasan manual, QRIS Midtrans, ledger gateway, fondasi rekonsiliasi, pencairan dana manual ke rekening Banjar terverifikasi, serta kegiatan, presensi, calon dedosan, dan notulen paruman.
+Platform multi-Banjar PT Bali Santih Digital. **Fase 1–10 selesai**: fondasi multi-tenant, autentikasi/izin, audit, PWA dasar, admin mobile, website publik, KK/krama, unit organisasi, pengajuan perubahan data, administrasi surat dan arsip PDF privat, serta kas, iuran, dedosan, pelunasan manual, QRIS Midtrans, ledger gateway, fondasi rekonsiliasi, pencairan dana manual ke rekening Banjar terverifikasi, kegiatan, presensi, calon dedosan, notulen paruman, inventaris aset (kategori/lokasi, peminjaman/pengembalian, perawatan, stock opname, dan penghapusan), serta Portal Krama (Beranda ringkasan tagihan/kegiatan/pengajuan yang merangkai fitur self-service yang sudah ada).
 
 ## Menjalankan instalasi lokal yang sudah disiapkan
 
@@ -53,7 +53,7 @@ npm run build
 & $phpRuntime vendor/bin/pint --test app config database routes tests
 ```
 
-PHPUnit selalu memakai MySQL `banjarv2_testing` dan dapat menghapus isi database tersebut. Jangan gunakan database yang menyimpan data penting. Koneksi pengujian dapat diatur dalam `.env.testing`; nama database tetap diperiksa sebelum migration test. Hasil Fase 8: **125 tes PHP / 1.259 assertions dan 4 tes PWA lolos**; rincian ada di laporan fase. `scripts/verify.ps1` menjalankan test, Pint, PWA test, build, lalu migration lokal jika semua lolos.
+PHPUnit selalu memakai MySQL `banjarv2_testing` dan dapat menghapus isi database tersebut. Jangan gunakan database yang menyimpan data penting. Koneksi pengujian dapat diatur dalam `.env.testing`; nama database tetap diperiksa sebelum migration test. Hasil Fase 10: **146 tes PHP / 1.359 assertions dan 4 tes PWA lolos**; rincian ada di laporan fase. `scripts/verify.ps1` menjalankan test, Pint, PWA test, build, lalu migration lokal jika semua lolos.
 
 ## Alur pengguna
 
@@ -75,6 +75,10 @@ Unggah foto/PDF melalui Konten → Pustaka media, lalu pilih pada konten/profil.
 
 **Kegiatan** → buat agenda → atur jenis, basis presensi (per KK/individu) dan target (semua KK, unit, peran, krama tertentu) → buat daftar peserta → catat presensi di HP → Kelian/Penyarikan verifikasi → Petengen memutuskan calon dedosan dan membuat event dedosan untuk alur Keuangan. Krama dapat memberi tahu izin lewat **Kegiatan saya**. Modul ACTIVITY harus berstatus Aktif (bukan Dasar). Panduan di `docs/PHASE_8_ACTIVITY.md`.
 
+**Aset** → Admin Banjar/Petengen menambah kategori dan lokasi → tambah aset individual (jumlah 1) atau jumlah (barang identik dalam satu record) → pindah lokasi, catat kondisi, jadwalkan perawatan sesuai kebutuhan. **Peminjaman** membuat catatan untuk krama terdaftar atau peminjam luar, menambah aset yang dipinjam, dan mencatat pengembalian bertahap. **Stock opname** menghitung fisik per lokasi dan menyesuaikan jumlah otomatis dari selisih hitung. **Penghapusan** (permission terpisah, default Admin Banjar saja) mengurangi jumlah dengan alasan wajib; riwayat tetap tersimpan. ASSET aktif pada dua Banjar demo. Panduan di `docs/PHASE_9_ASSET.md`.
+
+**Portal Krama** (tab "Portal" pada navigasi, `/portal/beranda`) → merangkai fitur self-service krama yang sudah ada: sapaan, kartu Tagihan Saya (jika FINANCE+PAYMENT aktif), Kegiatan Terdekat (jika ACTIVITY Aktif), dan Pengajuan (jika ADMINISTRATION aktif) — kartu yang modulnya nonaktif otomatis disembunyikan. Layanan surat, Aktivitas, dan Profil tetap memakai halaman yang sudah ada (`/portal`, `/aktivitas`, `/admin/krama/mine`) dengan tautan "← Beranda" untuk kembali. Panduan di `docs/PHASE_10_PORTAL.md`.
+
 ## Dokumen
 
 - `docs/BANJAR_DIGITAL_BLUEPRINT.md`: desain lintas fase.
@@ -86,6 +90,8 @@ Unggah foto/PDF melalui Konten → Pustaka media, lalu pilih pada konten/profil.
 - `docs/PHASE_6_PAYMENT.md`: QRIS, webhook, ledger, evidence/availability, konfigurasi dan rekonsiliasi.
 - `docs/PHASE_7_WITHDRAWAL.md`: rekening, pencairan manual, ledger reserve/paid/release, bukti transfer, dan pengujian serentak.
 - `docs/PHASE_8_ACTIVITY.md`: target & snapshot peserta, presensi, izin mandiri, verifikasi, calon dedosan, notulen, dan pengujian.
+- `docs/PHASE_9_ASSET.md`: kategori/lokasi, individual vs jumlah, peminjaman/pengembalian, perawatan, stock opname, penghapusan, dan pengujian.
+- `docs/PHASE_10_PORTAL.md`: Beranda krama, kartu tagihan/kegiatan/pengajuan, tautan unifikasi ke halaman self-service, dan pengujian.
 - `Master Prompt Codex — Banjar Digital V2 Final.md`: aturan produk dan roadmap.
 
-Fase 7 selesai secara lokal. QRIS belum diaktifkan: kredensial merchant, kebijakan settlement dan endpoint webhook publik perlu disiapkan sebelum pengujian sandbox nyata; pencairan baru berguna setelah ada saldo tersedia. Fase 8 selesai; Fase 9 menunggu instruksi berikutnya. Deployment produksi pertama dilakukan pada 17 September 2026; lihat [catatan deployment](docs/DEPLOYMENT.md).
+Fase 7 selesai secara lokal. QRIS belum diaktifkan: kredensial merchant, kebijakan settlement dan endpoint webhook publik perlu disiapkan sebelum pengujian sandbox nyata; pencairan baru berguna setelah ada saldo tersedia. Fase 8, 9, dan 10 selesai; Fase 11 menunggu instruksi berikutnya. Deployment produksi pertama dilakukan pada 17 September 2026; lihat [catatan deployment](docs/DEPLOYMENT.md).

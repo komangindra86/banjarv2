@@ -32,7 +32,7 @@ class AppServiceProvider extends ServiceProvider
         View::composer('*', function ($view) {
             $view->with('currentBanjar', app(CurrentBanjar::class)->optional());
         });
-        View::composer(['admin.*', 'activity.*'], function ($view) {
+        View::composer(['admin.*', 'activity.*', 'asset.*'], function ($view) {
             $view->with('access', app(Access::class));
             $view->with('gate', app(ModuleGate::class));
         });
@@ -40,6 +40,12 @@ class AppServiceProvider extends ServiceProvider
             $access = app(Access::class);
             $view->with('fa', $access);
             foreach (['canCash' => 'cash.manage', 'canIssue' => 'billing.issue', 'canDedosan' => 'dedosan.issue', 'canApprove' => 'dedosan.approve'] as $key => $permission) {
+                $view->with($key, $access->tenant(auth()->user(), $permission));
+            }
+        });
+        View::composer('asset.*', function ($view) {
+            $access = app(Access::class);
+            foreach (['canManage' => 'asset.manage', 'canDispose' => 'asset.dispose'] as $key => $permission) {
                 $view->with($key, $access->tenant(auth()->user(), $permission));
             }
         });

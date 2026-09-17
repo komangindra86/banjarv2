@@ -4,7 +4,7 @@ Tanggal: 15 September 2026
 Pemilik produk: PT Bali Santih Digital  
 Status: Fase 0 selesai; rancangan untuk implementasi bertahap, bukan aplikasi yang sudah berjalan.
 
-**Update 17 September 2026:** Fase 1–6 telah diimplementasikan dan diuji. Lihat [laporan Fase 1](PHASE_1_FOUNDATION.md), [laporan Fase 2](PHASE_2_WEBSITE.md), [laporan Fase 3](PHASE_3_KRAMA.md), [laporan Fase 4](PHASE_4_ADMINISTRATION.md), [laporan Fase 5](PHASE_5_FINANCE.md), [laporan Fase 6](PHASE_6_PAYMENT.md), dan [panduan menjalankan](../README.md). Isi blueprint berikut adalah desain lintas fase; fitur di luar Fase 6 masih rencana.
+**Update 17 September 2026:** Fase 1–10 telah diimplementasikan dan diuji. Lihat [laporan Fase 1](PHASE_1_FOUNDATION.md), [laporan Fase 2](PHASE_2_WEBSITE.md), [laporan Fase 3](PHASE_3_KRAMA.md), [laporan Fase 4](PHASE_4_ADMINISTRATION.md), [laporan Fase 5](PHASE_5_FINANCE.md), [laporan Fase 6](PHASE_6_PAYMENT.md), [laporan Fase 7](PHASE_7_WITHDRAWAL.md), [laporan Fase 8](PHASE_8_ACTIVITY.md), [laporan Fase 9](PHASE_9_ASSET.md), [laporan Fase 10](PHASE_10_PORTAL.md), dan [panduan menjalankan](../README.md). Isi blueprint berikut adalah desain lintas fase; fitur di luar Fase 10 masih rencana.
 
 ## 1. Audit dan batas pekerjaan
 
@@ -365,8 +365,8 @@ Setiap fase menjalankan test terkait dan regresi fondasi tenant/permission. Fase
 | 6 Midtrans + ledger | Payments, attempt guard, inbox webhook, accounts/journals/entries, reconciliation | Webhook idempotent, ledger balance, availability teruji; tanpa payout API |
 | 7 Withdrawal manual | Bank accounts/reviews, withdrawals/steps dan bukti | Reserve/release/paid atomic, race test MySQL, rekening snapshot lolos — **selesai lokal, lihat docs/PHASE_7_WITHDRAWAL.md** |
 | 8 Kegiatan/presensi | Upgrade activities; targets/participants/attendance/candidates/minutes | Entity lama dipakai ulang, target dedup, dedosan melalui review — **selesai lokal, lihat docs/PHASE_8_ACTIVITY.md** |
-| 9 Aset | Inventory/loan/return/inspection/maintenance/opname/disposal | Quantity invariant dan histori tanpa destructive delete |
-| 10 Portal krama | Satukan halaman keluarga, layanan, aktivitas, billing/QRIS/history/profil; migration hanya jika gap ditemukan | Kepemilikan data dan mobile/PWA teruji |
+| 9 Aset | Inventory/loan/return/inspection/maintenance/opname/disposal | Quantity invariant dan histori tanpa destructive delete — **selesai lokal, lihat docs/PHASE_9_ASSET.md** |
+| 10 Portal krama | Satukan halaman keluarga, layanan, aktivitas, billing/QRIS/history/profil; migration hanya jika gap ditemukan | Kepemilikan data dan mobile/PWA teruji — **selesai lokal, lihat docs/PHASE_10_PORTAL.md** |
 | 11 Dashboard/notification | Dashboard per peran, notifications/deliveries/push subscriptions | Tindakan relevan sesuai scope dan delivery idempotent |
 | 12 Production hardening | Audit keamanan, concurrency/reconciliation, DNS/TLS, backup, monitoring, runbooks | Bukti semua test kritis, restore drill dan kesiapan operasional |
 
@@ -397,4 +397,4 @@ Keputusan ini tidak menghalangi penyelesaian Fase 0. Sebelum fitur terkait diakt
 - Security, PWA, mandatory tests, deployment dan keputusan PO: bagian 13–18.
 - Tidak ada source aplikasi atau migration yang diimplementasikan pada Fase 0.
 
-**Catatan gerbang:** instruksi Fase 1–3 telah diberikan dan implementasinya selesai. Fase 4 menunggu instruksi Product Owner berikutnya.
+**Catatan gerbang:** instruksi Fase 1–10 telah diberikan dan implementasinya selesai. Fase 11 menunggu instruksi Product Owner berikutnya.

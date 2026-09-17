@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\KramaController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\LetterController;
 use App\Http\Controllers\MembershipController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PlatformController;
+use App\Http\Controllers\PortalController;
 use App\Http\Controllers\PublicWebsiteController;
 use App\Http\Controllers\PwaController;
 use App\Http\Controllers\WebsiteAdminController;
@@ -46,6 +48,9 @@ Route::middleware(['access:tenant', 'module:ACTIVITY,ACTIVE', 'module:KRAMA'])->
     Route::get('/aktivitas', [ActivityController::class, 'portal']);
     Route::post('/aktivitas/{id}/izin', [ActivityController::class, 'excuse'])->whereNumber('id')->middleware('throttle:10,1');
 });
+
+// Beranda degrades per card: reachable with only KRAMA active, each summary hidden if its own module/permission is missing.
+Route::middleware(['access:tenant', 'module:KRAMA'])->get('/portal/beranda', [PortalController::class, 'home']);
 
 Route::prefix('portal')->middleware(['access:tenant', 'module:ADMINISTRATION', 'module:KRAMA'])->group(function () {
     Route::get('/', [LetterController::class, 'index']);
@@ -138,6 +143,36 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
         Route::post('/{id}/retry', [LetterController::class, 'retry'])->whereNumber('id')->middleware('throttle:5,1');
         Route::get('/{id}/pdf', [LetterController::class, 'download'])->whereNumber('id');
     });
+    Route::prefix('assets')->middleware('module:ASSET')->group(function () {
+        Route::get('/', [AssetController::class, 'index']);
+        Route::get('/create', [AssetController::class, 'create']);
+        Route::post('/', [AssetController::class, 'store']);
+        Route::post('/categories', [AssetController::class, 'storeCategory']);
+        Route::post('/categories/{id}/toggle', [AssetController::class, 'toggleCategory'])->whereNumber('id');
+        Route::post('/locations', [AssetController::class, 'storeLocation']);
+        Route::post('/locations/{id}/toggle', [AssetController::class, 'toggleLocation'])->whereNumber('id');
+        Route::get('/loans', [AssetController::class, 'loans']);
+        Route::get('/loans/create', [AssetController::class, 'createLoan']);
+        Route::post('/loans', [AssetController::class, 'storeLoan'])->middleware('throttle:20,1');
+        Route::get('/loans/{id}', [AssetController::class, 'loan'])->whereNumber('id');
+        Route::post('/loans/{id}/items', [AssetController::class, 'addLoanItem'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post('/loans/{id}/items/{item}/return', [AssetController::class, 'returnLoanItem'])->whereNumber(['id', 'item'])->middleware('throttle:30,1');
+        Route::get('/opname', [AssetController::class, 'opnames']);
+        Route::get('/opname/create', [AssetController::class, 'createOpname']);
+        Route::post('/opname', [AssetController::class, 'storeOpname'])->middleware('throttle:10,1');
+        Route::get('/opname/{id}', [AssetController::class, 'opname'])->whereNumber('id');
+        Route::post('/opname/{id}/items/{item}', [AssetController::class, 'countItem'])->whereNumber(['id', 'item']);
+        Route::post('/opname/{id}/complete', [AssetController::class, 'completeOpname'])->whereNumber('id');
+        Route::get('/{id}/qr', [AssetController::class, 'qr'])->whereNumber('id');
+        Route::get('/{id}/edit', [AssetController::class, 'edit'])->whereNumber('id');
+        Route::patch('/{id}', [AssetController::class, 'update'])->whereNumber('id');
+        Route::get('/{id}', [AssetController::class, 'show'])->whereNumber('id');
+        Route::post('/{id}/transfer', [AssetController::class, 'transfer'])->whereNumber('id');
+        Route::post('/{id}/inspect', [AssetController::class, 'inspect'])->whereNumber('id');
+        Route::post('/{id}/maintenance', [AssetController::class, 'scheduleMaintenance'])->whereNumber('id');
+        Route::post('/{id}/maintenance/{maintenance}/complete', [AssetController::class, 'completeMaintenance'])->whereNumber(['id', 'maintenance']);
+        Route::post('/{id}/dispose', [AssetController::class, 'dispose'])->whereNumber('id')->middleware('throttle:20,1');
+    });
     Route::prefix('krama')->middleware('module:KRAMA')->group(function () {
         Route::get('/', [KramaController::class, 'index']);
         Route::get('/mine', [KramaController::class, 'mine']);
@@ -159,13 +194,15 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
         Route::get('/changes/{id}', [KramaController::class, 'change'])->whereNumber('id');
         Route::post('/changes/{id}/review', [KramaController::class, 'review'])->whereNumber('id');
     });
-    Route::get('/profile', [WebsiteAdminController::class, 'profile']);
-    Route::patch('/profile', [WebsiteAdminController::class, 'updateProfile']);
-    Route::get('/media', [WebsiteAdminController::class, 'media']);
-    Route::post('/media', [WebsiteAdminController::class, 'upload']);
-    Route::patch('/media/{id}', [WebsiteAdminController::class, 'visibility'])->whereNumber('id');
-    Route::get('/media/{id}/download', [WebsiteAdminController::class, 'download'])->whereNumber('id');
-    Route::get('/qr', [WebsiteAdminController::class, 'qr']);
+    Route::middleware('module:WEBSITE')->group(function () {
+        Route::get('/profile', [WebsiteAdminController::class, 'profile']);
+        Route::patch('/profile', [WebsiteAdminController::class, 'updateProfile']);
+        Route::get('/media', [WebsiteAdminController::class, 'media']);
+        Route::post('/media', [WebsiteAdminController::class, 'upload']);
+        Route::patch('/media/{id}', [WebsiteAdminController::class, 'visibility'])->whereNumber('id');
+        Route::get('/media/{id}/download', [WebsiteAdminController::class, 'download'])->whereNumber('id');
+        Route::get('/qr', [WebsiteAdminController::class, 'qr']);
+    });
     Route::get('/content/{type}', [WebsiteAdminController::class, 'index']);
     Route::get('/content/{type}/create', [WebsiteAdminController::class, 'edit']);
     Route::post('/content/{type}', [WebsiteAdminController::class, 'save']);

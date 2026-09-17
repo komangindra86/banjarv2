@@ -332,7 +332,7 @@ class AdministrationTest extends TestCase
         $this->login($this->self);
         DB::table('banjar_modules')->where('banjar_id', $this->a)->where('code', 'ADMINISTRATION')->update(['status' => 'INACTIVE']);
         $this->get($this->host.'/portal')->assertForbidden();
-        $this->get($this->host.'/admin')->assertDontSee('href="/portal"', false);
+        $this->get($this->host.'/admin')->assertDontSee('Surat saya');
         $this->get($this->host.'/layanan/surat-keterangan-krama')->assertDontSee('Ajukan sekarang');
         $this->context();
         $this->expectException(HttpException::class);

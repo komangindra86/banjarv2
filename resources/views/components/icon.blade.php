@@ -7,6 +7,7 @@
 @case('settings')<path d="M4 6h16M4 12h16M4 18h16"/><rect x="7" y="4" width="4" height="4" rx="1" fill="currentColor"/><rect x="14" y="10" width="4" height="4" rx="1" fill="currentColor"/><rect x="8" y="16" width="4" height="4" rx="1" fill="currentColor"/>@break
 @case('history')<path d="M3 11a9 9 0 1 1 2 7M3 5v6h6M12 7v5l3 2"/>@break
 @case('profile')<path d="M4 21h16M6 21V8l6-5 6 5v13M10 21v-6h4v6M9 10h6"/>@break
+@case('box')<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5M12 13v8"/>@break
 @default<path d="m3 10 9-7 9 7M5 9v11h5v-6h4v6h5V9"/>
 @endswitch
 </svg>
