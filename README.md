@@ -1,5 +1,7 @@
 # Banjar Digital V2
 
+Super Admin produksi: https://banjar.balisantih.com. Detail layanan VPS, SSL, dan operasi tersedia di [catatan deployment](docs/DEPLOYMENT.md).
+
 Platform multi-Banjar PT Bali Santih Digital. **Fase 1–8 selesai**: fondasi multi-tenant, autentikasi/izin, audit, PWA dasar, admin mobile, website publik, KK/krama, unit organisasi, pengajuan perubahan data, administrasi surat dan arsip PDF privat, serta kas, iuran, dedosan, pelunasan manual, QRIS Midtrans, ledger gateway, fondasi rekonsiliasi, pencairan dana manual ke rekening Banjar terverifikasi, serta kegiatan, presensi, calon dedosan, dan notulen paruman.
 
 ## Menjalankan instalasi lokal yang sudah disiapkan
@@ -86,4 +88,4 @@ Unggah foto/PDF melalui Konten → Pustaka media, lalu pilih pada konten/profil.
 - `docs/PHASE_8_ACTIVITY.md`: target & snapshot peserta, presensi, izin mandiri, verifikasi, calon dedosan, notulen, dan pengujian.
 - `Master Prompt Codex — Banjar Digital V2 Final.md`: aturan produk dan roadmap.
 
-Fase 7 selesai secara lokal. QRIS belum diaktifkan: kredensial merchant, kebijakan settlement dan endpoint webhook publik perlu disiapkan sebelum pengujian sandbox nyata; pencairan baru berguna setelah ada saldo tersedia. Fase 8 selesai secara lokal; Fase 9 menunggu instruksi berikutnya. Belum dilakukan deployment produksi.
+Fase 7 selesai secara lokal. QRIS belum diaktifkan: kredensial merchant, kebijakan settlement dan endpoint webhook publik perlu disiapkan sebelum pengujian sandbox nyata; pencairan baru berguna setelah ada saldo tersedia. Fase 8 selesai; Fase 9 menunggu instruksi berikutnya. Deployment produksi pertama dilakukan pada 17 September 2026; lihat [catatan deployment](docs/DEPLOYMENT.md).
