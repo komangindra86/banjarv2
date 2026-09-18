@@ -51,7 +51,7 @@ Seluruh tabel memakai `banjar_id`. Slug unik per tenant per jenis konten. FK com
 
 ## Cara menggunakan
 
-1. Buka `http://biaung.banjar.localhost:18915/` atau `http://tegalgundul.banjar.localhost:18915/` untuk website publik.
+1. Buka `http://biaung.localhost:18915/` atau `http://tegalgundul.localhost:18915/` untuk website publik.
 2. Masuk melalui `/login`; akses demo tetap di `storage/app/private/demo-access.txt`.
 3. **Konten → Pustaka media**: unggah foto/dokumen; pilih Publik bila akan ditampilkan pada website.
 4. **Konten → Profil & kontak**: isi informasi nyata, logo, sampul, alamat dan koordinat. Penyimpanan profil langsung mengubah halaman publik.

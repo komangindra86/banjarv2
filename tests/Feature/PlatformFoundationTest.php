@@ -47,7 +47,7 @@ class PlatformFoundationTest extends TestCase
             throw new \RuntimeException('Tests require dedicated banjarv2_testing database.');
         }
         $this->withoutVite();
-        config(['platform.host' => 'admin.banjar.localhost', 'platform.tenant_base_domain' => 'banjar.localhost']);
+        config(['platform.host' => 'admin.banjar.localhost', 'platform.tenant_base_domain' => 'localhost']);
         $this->seed(RoleSeeder::class);
         $this->super = User::factory()->create(['email' => 'super@example.test', 'password' => $this->password, 'status' => 'ACTIVE']);
         DB::table('platform_role_assignments')->insert(['user_id' => $this->super->id, 'role_id' => DB::table('roles')->where('code', 'SUPER_ADMIN')->value('id')]);
@@ -92,7 +92,7 @@ class PlatformFoundationTest extends TestCase
     public function test_csrf_rejects_untrusted_post(): void
     {
         $this->app->instance('env', 'production');
-        $this->post('http://alpha.banjar.localhost/login', ['email' => $this->admin->email, 'password' => $this->password])->assertStatus(419);
+        $this->post('http://alpha.localhost/login', ['email' => $this->admin->email, 'password' => $this->password])->assertStatus(419);
     }
 
     public function test_onboarding_validation_does_not_flash_passwords_or_create_partial_data(): void
@@ -128,7 +128,7 @@ class PlatformFoundationTest extends TestCase
     public function test_domain_is_unique_and_cannot_be_registered_for_two_tenants(): void
     {
         $this->expectException(QueryException::class);
-        DB::table('tenant_domains')->insert(['banjar_id' => $this->b, 'domain' => 'alpha.banjar.localhost']);
+        DB::table('tenant_domains')->insert(['banjar_id' => $this->b, 'domain' => 'alpha.localhost']);
     }
 
     public function test_database_rejects_basic_mode_for_other_modules(): void
@@ -139,7 +139,7 @@ class PlatformFoundationTest extends TestCase
 
     private function loginTenant(): void
     {
-        $this->post('http://alpha.banjar.localhost/login', ['email' => $this->admin->email, 'password' => $this->password])->assertRedirect('/admin');
+        $this->post('http://alpha.localhost/login', ['email' => $this->admin->email, 'password' => $this->password])->assertRedirect('/admin');
     }
 
     private function setTenant(int $id): void
@@ -149,60 +149,60 @@ class PlatformFoundationTest extends TestCase
 
     public function test_resolver_exact_verified_domains_and_context_cleanup(): void
     {
-        $this->get('http://alpha.banjar.localhost/login')->assertOk()->assertSee('Banjar alpha')->assertDontSee('Banjar beta');
+        $this->get('http://alpha.localhost/login')->assertOk()->assertSee('Banjar alpha')->assertDontSee('Banjar beta');
         $this->assertNull(app(CurrentBanjar::class)->optional());
-        $this->get('http://beta.banjar.localhost/login')->assertOk()->assertSee('Banjar beta')->assertDontSee('Banjar alpha');
-        $this->get('http://unknown.banjar.localhost/login')->assertNotFound();
-        $this->get('http://alpha.banjar.localhost.attacker.test/login')->assertNotFound();
+        $this->get('http://beta.localhost/login')->assertOk()->assertSee('Banjar beta')->assertDontSee('Banjar alpha');
+        $this->get('http://unknown.localhost/login')->assertNotFound();
+        $this->get('http://alpha.localhost.attacker.test/login')->assertNotFound();
         DB::table('tenant_domains')->insert(['banjar_id' => $this->a, 'domain' => 'alias.example.test', 'verification_status' => 'PENDING']);
         $this->get('http://alias.example.test/login')->assertNotFound();
         DB::table('tenant_domains')->where('domain', 'alias.example.test')->update(['verification_status' => 'VERIFIED', 'verified_at' => now()]);
         $this->get('http://alias.example.test/login')->assertOk()->assertSee('Banjar alpha');
         DB::table('banjars')->where('id', $this->a)->update(['status' => 'SUSPENDED']);
-        $this->get('http://alpha.banjar.localhost/login')->assertNotFound();
+        $this->get('http://alpha.localhost/login')->assertNotFound();
         $this->get('http://alias.example.test/login')->assertNotFound();
     }
 
     public function test_forwarded_host_does_not_choose_tenant(): void
     {
-        $this->withHeaders(['X-Forwarded-Host' => 'beta.banjar.localhost'])->get('http://alpha.banjar.localhost/login')->assertOk()->assertSee('Banjar alpha')->assertDontSee('Banjar beta');
+        $this->withHeaders(['X-Forwarded-Host' => 'beta.localhost'])->get('http://alpha.localhost/login')->assertOk()->assertSee('Banjar alpha')->assertDontSee('Banjar beta');
     }
 
     public function test_tenant_login_dashboard_logout_and_cache_headers(): void
     {
-        $this->get('http://alpha.banjar.localhost/admin')->assertRedirect('/login');
+        $this->get('http://alpha.localhost/admin')->assertRedirect('/login');
         $this->loginTenant();
-        $this->get('http://alpha.banjar.localhost/admin')->assertOk()->assertSee('Admin alpha')->assertHeader('Cache-Control', 'max-age=0, no-store, private');
-        $this->post('http://alpha.banjar.localhost/logout')->assertRedirect('/login');
-        $this->get('http://alpha.banjar.localhost/admin')->assertRedirect('/login');
+        $this->get('http://alpha.localhost/admin')->assertOk()->assertSee('Admin alpha')->assertHeader('Cache-Control', 'max-age=0, no-store, private');
+        $this->post('http://alpha.localhost/logout')->assertRedirect('/login');
+        $this->get('http://alpha.localhost/admin')->assertRedirect('/login');
         $this->assertDatabaseHas('audit_logs', ['banjar_id' => $this->a, 'action' => 'auth.logout', 'actor_id' => $this->admin->id]);
     }
 
     public function test_wrong_tenant_login_and_platform_role_do_not_grant_tenant_access(): void
     {
-        $this->post('http://beta.banjar.localhost/login', ['email' => $this->admin->email, 'password' => $this->password])->assertSessionHasErrors('email');
-        $this->post('http://alpha.banjar.localhost/login', ['email' => $this->super->email, 'password' => $this->password])->assertSessionHasErrors('email');
+        $this->post('http://beta.localhost/login', ['email' => $this->admin->email, 'password' => $this->password])->assertSessionHasErrors('email');
+        $this->post('http://alpha.localhost/login', ['email' => $this->super->email, 'password' => $this->password])->assertSessionHasErrors('email');
         $this->post('http://admin.banjar.localhost/login', ['email' => $this->admin->email, 'password' => $this->password])->assertSessionHasErrors('email');
     }
 
     public function test_copied_session_and_reassigned_domain_are_rejected(): void
     {
         $this->loginTenant();
-        $this->get('http://beta.banjar.localhost/admin')->assertRedirect('/login');
+        $this->get('http://beta.localhost/admin')->assertRedirect('/login');
         $this->loginTenant();
         DB::table('banjars')->where('id', $this->a)->update(['primary_domain_id' => null]);
-        DB::table('tenant_domains')->where('domain', 'alpha.banjar.localhost')->update(['banjar_id' => $this->b]);
-        $this->get('http://alpha.banjar.localhost/admin')->assertRedirect('/login');
+        DB::table('tenant_domains')->where('domain', 'alpha.localhost')->update(['banjar_id' => $this->b]);
+        $this->get('http://alpha.localhost/admin')->assertRedirect('/login');
     }
 
     public function test_membership_and_user_revocation_apply_to_existing_sessions(): void
     {
         $this->loginTenant();
         DB::table('banjar_user_memberships')->where('banjar_id', $this->a)->update(['status' => 'INACTIVE']);
-        $this->get('http://alpha.banjar.localhost/admin')->assertForbidden();
+        $this->get('http://alpha.localhost/admin')->assertForbidden();
         DB::table('banjar_user_memberships')->where('banjar_id', $this->a)->update(['status' => 'ACTIVE']);
         DB::table('users')->where('id', $this->admin->id)->update(['status' => 'INACTIVE']);
-        $this->get('http://alpha.banjar.localhost/admin')->assertForbidden();
+        $this->get('http://alpha.localhost/admin')->assertForbidden();
     }
 
     public function test_platform_onboarding_status_and_route_separation(): void
@@ -210,15 +210,15 @@ class PlatformFoundationTest extends TestCase
         $this->post('http://admin.banjar.localhost/login', ['email' => $this->super->email, 'password' => $this->password])->assertRedirect('/platform');
         $this->get('http://admin.banjar.localhost/platform')->assertOk()->assertSee('Banjar alpha')->assertSee('Banjar beta');
         $this->get('http://admin.banjar.localhost/admin')->assertNotFound();
-        $this->get('http://alpha.banjar.localhost/platform')->assertNotFound();
+        $this->get('http://alpha.localhost/platform')->assertNotFound();
         $this->post('http://admin.banjar.localhost/platform/banjars', ['name' => 'Banjar Gamma', 'slug' => 'gamma', 'admin_name' => 'Admin Gamma', 'admin_email' => 'gamma@example.test', 'admin_password' => $this->password, 'admin_password_confirmation' => $this->password])->assertRedirect();
         $gamma = DB::table('banjars')->where('slug', 'gamma')->first();
         $this->assertNotNull($gamma);
         $this->assertSame(9, DB::table('banjar_modules')->where('banjar_id', $gamma->id)->count());
         $this->patch('http://admin.banjar.localhost/platform/banjars/'.$gamma->id.'/status', ['status' => 'SUSPENDED'])->assertRedirect();
-        $this->get('http://gamma.banjar.localhost/login')->assertNotFound();
+        $this->get('http://gamma.localhost/login')->assertNotFound();
         $this->patch('http://admin.banjar.localhost/platform/banjars/'.$gamma->id.'/status', ['status' => 'ACTIVE'])->assertRedirect();
-        $this->get('http://gamma.banjar.localhost/login')->assertOk();
+        $this->get('http://gamma.localhost/login')->assertOk();
     }
 
     public function test_settings_idor_query_and_form_tenant_are_ignored(): void
@@ -226,13 +226,13 @@ class PlatformFoundationTest extends TestCase
         $this->loginTenant();
         $aSettings = DB::table('banjar_settings')->where('banjar_id', $this->a)->value('id');
         $bSettings = DB::table('banjar_settings')->where('banjar_id', $this->b)->value('id');
-        $this->get('http://alpha.banjar.localhost/admin/settings?banjar_id='.$this->b)->assertOk()->assertSee('/admin/settings/'.$aSettings, false)->assertDontSee('Banjar beta');
+        $this->get('http://alpha.localhost/admin/settings?banjar_id='.$this->b)->assertOk()->assertSee('/admin/settings/'.$aSettings, false)->assertDontSee('Banjar beta');
         $data = ['banjar_id' => $this->b, 'template_code' => 'template-01', 'accent_color' => '#123456'];
-        $this->patch('http://alpha.banjar.localhost/admin/settings/'.$bSettings, $data)->assertNotFound();
-        $this->patch('http://alpha.banjar.localhost/admin/settings/'.$aSettings, $data)->assertRedirect();
+        $this->patch('http://alpha.localhost/admin/settings/'.$bSettings, $data)->assertNotFound();
+        $this->patch('http://alpha.localhost/admin/settings/'.$aSettings, $data)->assertRedirect();
         $this->assertDatabaseHas('banjar_settings', ['banjar_id' => $this->a, 'accent_color' => '#123456']);
         $this->assertDatabaseHas('banjar_settings', ['banjar_id' => $this->b, 'accent_color' => '#b94715']);
-        $this->get('http://alpha.banjar.localhost/admin/audit')->assertOk()->assertDontSee('Banjar #'.$this->b);
+        $this->get('http://alpha.localhost/admin/audit')->assertOk()->assertDontSee('Banjar #'.$this->b);
         $this->setTenant($this->a);
         $this->assertFalse(app(TenantQuery::class)->table('audit_logs')->where('banjar_id', $this->b)->exists());
     }
@@ -241,9 +241,9 @@ class PlatformFoundationTest extends TestCase
     {
         $this->loginTenant();
         app(TenantManager::class)->module($this->super, $this->a, 'WEBSITE', ['status' => 'INACTIVE']);
-        $this->get('http://alpha.banjar.localhost/admin')->assertOk()->assertDontSee('href="/admin/website"', false)->assertDontSee('href="/admin/settings"', false);
-        $this->get('http://alpha.banjar.localhost/admin/website')->assertForbidden();
-        $this->get('http://alpha.banjar.localhost/admin/settings')->assertForbidden();
+        $this->get('http://alpha.localhost/admin')->assertOk()->assertDontSee('href="/admin/website"', false)->assertDontSee('href="/admin/settings"', false);
+        $this->get('http://alpha.localhost/admin/website')->assertForbidden();
+        $this->get('http://alpha.localhost/admin/settings')->assertForbidden();
         $this->setTenant($this->a);
         $this->expectException(HttpException::class);
         app(SettingsManager::class)->update($this->admin, DB::table('banjar_settings')->where('banjar_id', $this->a)->value('id'), ['template_code' => 'template-01', 'accent_color' => '#123456']);
@@ -253,8 +253,8 @@ class PlatformFoundationTest extends TestCase
     {
         $this->loginTenant();
         DB::table('tenant_role_assignments')->where('banjar_id', $this->a)->update(['role_id' => DB::table('roles')->where('code', 'PETENGEN')->value('id')]);
-        $this->get('http://alpha.banjar.localhost/admin')->assertOk()->assertDontSee('href="/admin/settings"', false);
-        $this->get('http://alpha.banjar.localhost/admin/settings')->assertForbidden();
+        $this->get('http://alpha.localhost/admin')->assertOk()->assertDontSee('href="/admin/settings"', false);
+        $this->get('http://alpha.localhost/admin/settings')->assertForbidden();
         $this->setTenant($this->a);
         $this->expectException(HttpException::class);
         app(SettingsManager::class)->update($this->admin, 1, ['template_code' => 'template-01', 'accent_color' => '#123456']);
@@ -322,17 +322,17 @@ class PlatformFoundationTest extends TestCase
     public function test_login_is_rate_limited_and_failed_attempt_does_not_authenticate(): void
     {
         for ($i = 0; $i < 6; $i++) {
-            $result = $this->post('http://alpha.banjar.localhost/login', ['email' => $this->admin->email, 'password' => 'wrong']);
+            $result = $this->post('http://alpha.localhost/login', ['email' => $this->admin->email, 'password' => 'wrong']);
         }
         $result->assertSessionHasErrors('email');
         $this->assertTrue(RateLimiter::tooManyAttempts('login:'.hash('sha256', $this->admin->email.'|127.0.0.1'), 5));
-        $this->get('http://alpha.banjar.localhost/admin')->assertRedirect('/login');
+        $this->get('http://alpha.localhost/admin')->assertRedirect('/login');
     }
 
     public function test_manifest_is_tenant_aware_and_no_credentials_enter_audit(): void
     {
-        $this->get('http://alpha.banjar.localhost/manifest.webmanifest')->assertOk()->assertJsonPath('name', 'Banjar alpha')->assertJsonPath('scope', '/');
-        $this->get('http://beta.banjar.localhost/manifest.webmanifest')->assertJsonPath('name', 'Banjar beta');
+        $this->get('http://alpha.localhost/manifest.webmanifest')->assertOk()->assertJsonPath('name', 'Banjar alpha')->assertJsonPath('scope', '/');
+        $this->get('http://beta.localhost/manifest.webmanifest')->assertJsonPath('name', 'Banjar beta');
         $this->assertStringNotContainsString($this->password, DB::table('audit_logs')->get()->toJson());
         $this->assertStringNotContainsString('admin_password', DB::table('audit_logs')->get()->toJson());
     }

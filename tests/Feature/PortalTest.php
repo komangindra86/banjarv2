@@ -30,7 +30,7 @@ class PortalTest extends TestCase
 
     private int $person;
 
-    private string $host = 'http://financeqa.banjar.localhost';
+    private string $host = 'http://financeqa.localhost';
 
     protected function beforeRefreshingDatabase(): void
     {
@@ -69,7 +69,7 @@ class PortalTest extends TestCase
 
     private function tenantLogin(User $user): self
     {
-        return $this->actingAs($user, 'web')->withSession(['auth_host' => 'financeqa.banjar.localhost', 'auth_context' => (string) $this->tenant]);
+        return $this->actingAs($user, 'web')->withSession(['auth_host' => 'financeqa.localhost', 'auth_context' => (string) $this->tenant]);
     }
 
     private function module(string $code, string $status = 'ACTIVE'): void

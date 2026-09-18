@@ -44,7 +44,7 @@ class AdministrationTest extends TestCase
 
     private int $service;
 
-    private string $host = 'http://alpha.banjar.localhost';
+    private string $host = 'http://alpha.localhost';
 
     protected function beforeRefreshingDatabase(): void
     {
@@ -58,7 +58,7 @@ class AdministrationTest extends TestCase
         parent::setUp();
         $this->withoutVite();
         Queue::fake();
-        config(['platform.host' => 'admin.banjar.localhost', 'platform.tenant_base_domain' => 'banjar.localhost']);
+        config(['platform.host' => 'admin.banjar.localhost', 'platform.tenant_base_domain' => 'localhost']);
         $this->seed(RoleSeeder::class);
         $this->super = User::factory()->create();
         DB::table('platform_role_assignments')->insert(['user_id' => $this->super->id, 'role_id' => DB::table('roles')->where('code', 'SUPER_ADMIN')->value('id')]);
@@ -93,7 +93,7 @@ class AdministrationTest extends TestCase
 
     private function login(User $user): void
     {
-        $this->actingAs($user)->withSession(['auth_host' => 'alpha.banjar.localhost', 'auth_context' => (string) $this->a]);
+        $this->actingAs($user)->withSession(['auth_host' => 'alpha.localhost', 'auth_context' => (string) $this->a]);
     }
 
     private function policy(bool $approval): void
@@ -225,11 +225,11 @@ class AdministrationTest extends TestCase
         $this->login($this->admin);
         $this->patch($this->host.'/admin/letters/services/'.$foreign, ['letters_enabled' => 0, 'letter_requires_approval' => 0, 'letter_version' => 1])->assertNotFound();
         $betaAdmin = User::where('email', 'beta@example.test')->firstOrFail();
-        $this->actingAs($betaAdmin)->withSession(['auth_host' => 'beta.banjar.localhost', 'auth_context' => (string) $this->b]);
+        $this->actingAs($betaAdmin)->withSession(['auth_host' => 'beta.localhost', 'auth_context' => (string) $this->b]);
         foreach (['', '/pdf'] as $path) {
-            $this->get('http://beta.banjar.localhost/admin/letters/'.$id.$path)->assertNotFound();
+            $this->get('http://beta.localhost/admin/letters/'.$id.$path)->assertNotFound();
         }
-        $this->post('http://beta.banjar.localhost/admin/letters/'.$id.'/review', ['action' => 'verify'])->assertNotFound();
+        $this->post('http://beta.localhost/admin/letters/'.$id.'/review', ['action' => 'verify'])->assertNotFound();
     }
 
     public function test_another_krama_cannot_see_cancel_or_download_requests_even_after_relink(): void

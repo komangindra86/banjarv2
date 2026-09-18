@@ -20,7 +20,7 @@ Artisan::call('migrate:fresh', ['--force' => true]);
 $fixture = FinanceFixture::create();
 DB::table('banjar_modules')->where('banjar_id', $fixture['tenant'])->where('code', 'PAYMENT')->update(['status' => 'ACTIVE']);
 $actor = User::findOrFail($fixture['users']['PETENGEN']);
-app(FinanceManager::class)->issue($actor, $fixture['event']);
+app(FinanceManager::class)->issue(User::findOrFail($fixture['users']['KESINOMAN']), $fixture['event']);
 config(['payment.enabled' => true, 'payment.merchant_id' => 'PREVIEW', 'payment.server_key' => 'preview-only', 'payment.production' => false, 'payment.settlement_hold_days' => 0]);
 Http::preventStrayRequests();
 Http::fake(function ($request) {

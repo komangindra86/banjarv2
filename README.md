@@ -2,7 +2,7 @@
 
 Super Admin produksi: https://banjar.balisantih.com. Detail layanan VPS, SSL, dan operasi tersedia di [catatan deployment](docs/DEPLOYMENT.md).
 
-Platform multi-Banjar PT Bali Santih Digital. **Fase 1–10 selesai**: fondasi multi-tenant, autentikasi/izin, audit, PWA dasar, admin mobile, website publik, KK/krama, unit organisasi, pengajuan perubahan data, administrasi surat dan arsip PDF privat, serta kas, iuran, dedosan, pelunasan manual, QRIS Midtrans, ledger gateway, fondasi rekonsiliasi, pencairan dana manual ke rekening Banjar terverifikasi, kegiatan, presensi, calon dedosan, notulen paruman, inventaris aset (kategori/lokasi, peminjaman/pengembalian, perawatan, stock opname, dan penghapusan), serta Portal Krama (Beranda ringkasan tagihan/kegiatan/pengajuan yang merangkai fitur self-service yang sudah ada).
+Platform multi-Banjar PT Bali Santih Digital. **Fase 1–11 selesai**: fondasi multi-tenant, autentikasi/izin, audit, PWA dasar, admin mobile, website publik, KK/krama, unit organisasi, pengajuan perubahan data, administrasi surat dan arsip PDF privat, serta kas, iuran, dedosan, pelunasan manual, QRIS Midtrans, ledger gateway, fondasi rekonsiliasi, pencairan dana manual ke rekening Banjar terverifikasi, kegiatan, presensi, calon dedosan, notulen paruman, inventaris aset (kategori/lokasi, peminjaman/pengembalian, perawatan, stock opname, dan penghapusan), Portal Krama (Beranda ringkasan tagihan/kegiatan/pengajuan), serta dashboard pengurus berorientasi tindakan dan notifikasi (kotak masuk dan push opsional).
 
 ## Menjalankan instalasi lokal yang sudah disiapkan
 
@@ -16,10 +16,10 @@ cd C:\laragon\www\banjarv2
 Untuk memproses PDF surat, jalankan `.\scripts\queue.ps1` pada terminal lain. Worker berhenti setelah satu jam atau ketika dihentikan; jalankan kembali jika diperlukan.
 
 - Super Admin: http://admin.banjar.localhost:18915/login
-- Website Biaung: http://biaung.banjar.localhost:18915/
-- Website Tegal Gundul: http://tegalgundul.banjar.localhost:18915/
-- Pengurus Biaung: http://biaung.banjar.localhost:18915/login
-- Pengurus Tegal Gundul: http://tegalgundul.banjar.localhost:18915/login
+- Website Biaung: http://biaung.localhost:18915/
+- Website Tegal Gundul: http://tegalgundul.localhost:18915/
+- Pengurus Biaung: http://biaung.localhost:18915/login
+- Pengurus Tegal Gundul: http://tegalgundul.localhost:18915/login
 
 Email dan kata sandi acak demo ada di `storage/app/private/demo-access.txt`. File ini privat dan tidak masuk Git. Domain `.localhost` didukung browser Chromium tanpa edit hosts. Port 18915 dipilih untuk menghindari benturan aplikasi lokal lain.
 
@@ -40,6 +40,7 @@ Prasyarat: PHP 8.2+, Composer 2, MySQL 8.0.16+ dengan InnoDB/CHECK, Node 22. Ext
 4. `php artisan migrate --seed` untuk schema dan katalog role. Seeder tidak membuat password default.
 5. `php artisan platform:create-admin email@domain-anda.id` meminta password secara tersembunyi. Alternatif khusus database lokal kosong: `php artisan platform:demo` membuat dua tenant dan credential acak.
 6. `npm run build`, lalu `scripts/serve.ps1` di Laragon atau `php artisan serve --port=18915` di environment lain.
+7. Opsional, untuk notifikasi push: `php artisan webpush:vapid` sekali, lalu salin `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` ke `.env`. Tanpa kunci ini, kotak masuk notifikasi tetap berfungsi normal; hanya pengiriman push yang nonaktif.
 
 APP_KEY dan credential tidak boleh dimasukkan ke Git. Production memakai document root `public/`, APP_DEBUG=false, HTTPS, DNS wildcard, dan akun database terbatas. PHP Laragon/Apache harus dipilih 8.2+ bila tidak menggunakan server preview.
 
@@ -53,7 +54,7 @@ npm run build
 & $phpRuntime vendor/bin/pint --test app config database routes tests
 ```
 
-PHPUnit selalu memakai MySQL `banjarv2_testing` dan dapat menghapus isi database tersebut. Jangan gunakan database yang menyimpan data penting. Koneksi pengujian dapat diatur dalam `.env.testing`; nama database tetap diperiksa sebelum migration test. Hasil Fase 10: **146 tes PHP / 1.359 assertions dan 4 tes PWA lolos**; rincian ada di laporan fase. `scripts/verify.ps1` menjalankan test, Pint, PWA test, build, lalu migration lokal jika semua lolos.
+PHPUnit selalu memakai MySQL `banjarv2_testing` dan dapat menghapus isi database tersebut. Jangan gunakan database yang menyimpan data penting. Koneksi pengujian dapat diatur dalam `.env.testing`; nama database tetap diperiksa sebelum migration test. Hasil Fase 11: **154 tes PHP / 1.377 assertions dan 7 tes PWA lolos**; rincian ada di laporan fase. `scripts/verify.ps1` menjalankan test, Pint, PWA test, build, lalu migration lokal jika semua lolos.
 
 ## Alur pengguna
 
@@ -79,6 +80,8 @@ Unggah foto/PDF melalui Konten → Pustaka media, lalu pilih pada konten/profil.
 
 **Portal Krama** (tab "Portal" pada navigasi, `/portal/beranda`) → merangkai fitur self-service krama yang sudah ada: sapaan, kartu Tagihan Saya (jika FINANCE+PAYMENT aktif), Kegiatan Terdekat (jika ACTIVITY Aktif), dan Pengajuan (jika ADMINISTRATION aktif) — kartu yang modulnya nonaktif otomatis disembunyikan. Layanan surat, Aktivitas, dan Profil tetap memakai halaman yang sudah ada (`/portal`, `/aktivitas`, `/admin/krama/mine`) dengan tautan "← Beranda" untuk kembali. Panduan di `docs/PHASE_10_PORTAL.md`.
 
+**Dashboard & Notifikasi** → Beranda pengurus (`/admin`) menampilkan hitungan tindakan yang menunggu sesuai permission masing-masing: dedosan/pencairan menunggu persetujuan Kelian, surat/perubahan data menunggu verifikasi atau persetujuan, dan presensi yang masih perlu dicatat di unit yang ditugaskan. Setiap kejadian ini juga tercatat sebagai notifikasi (tab "Notifikasi" dengan lencana belum dibaca, `/notifications`); pengguna dapat mengaktifkan notifikasi push dari perangkat masing-masing (opsional, perlu VAPID di `.env`). NOTIFICATION aktif pada dua Banjar demo. Panduan di `docs/PHASE_11_DASHBOARD_NOTIFICATION.md`.
+
 ## Dokumen
 
 - `docs/BANJAR_DIGITAL_BLUEPRINT.md`: desain lintas fase.
@@ -92,6 +95,7 @@ Unggah foto/PDF melalui Konten → Pustaka media, lalu pilih pada konten/profil.
 - `docs/PHASE_8_ACTIVITY.md`: target & snapshot peserta, presensi, izin mandiri, verifikasi, calon dedosan, notulen, dan pengujian.
 - `docs/PHASE_9_ASSET.md`: kategori/lokasi, individual vs jumlah, peminjaman/pengembalian, perawatan, stock opname, penghapusan, dan pengujian.
 - `docs/PHASE_10_PORTAL.md`: Beranda krama, kartu tagihan/kegiatan/pengajuan, tautan unifikasi ke halaman self-service, dan pengujian.
+- `docs/PHASE_11_DASHBOARD_NOTIFICATION.md`: dashboard berorientasi tindakan, kotak masuk, langganan push, job pengiriman, dan pengujian.
 - `Master Prompt Codex — Banjar Digital V2 Final.md`: aturan produk dan roadmap.
 
-Fase 7 selesai secara lokal. QRIS belum diaktifkan: kredensial merchant, kebijakan settlement dan endpoint webhook publik perlu disiapkan sebelum pengujian sandbox nyata; pencairan baru berguna setelah ada saldo tersedia. Fase 8, 9, dan 10 selesai; Fase 11 menunggu instruksi berikutnya. Deployment produksi pertama dilakukan pada 17 September 2026; lihat [catatan deployment](docs/DEPLOYMENT.md).
+Fase 7 selesai secara lokal. QRIS belum diaktifkan: kredensial merchant, kebijakan settlement dan endpoint webhook publik perlu disiapkan sebelum pengujian sandbox nyata; pencairan baru berguna setelah ada saldo tersedia. Fase 8–11 selesai; Fase 12 (Production hardening) menunggu instruksi berikutnya. Deployment produksi pertama dilakukan pada 17 September 2026; lihat [catatan deployment](docs/DEPLOYMENT.md).

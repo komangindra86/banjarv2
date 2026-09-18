@@ -37,7 +37,7 @@ final class Access
             ->join('permissions as p', 'p.id', '=', 'rp.permission_id')
             ->where('m.banjar_id', $this->tenant->id())->where('m.user_id', $user->id)->where('m.status', 'ACTIVE')
             ->where('r.scope', 'TENANT')->where('p.code', $permission)
-            ->when(! in_array($permission, ['dashboard.view', 'krama.view', 'krama.manage', 'change.verify', 'change.approve', 'letter.view', 'letter.verify', 'letter.approve', 'activity.view', 'attendance.record']), fn ($q) => $q->where('a.scope_type', 'BANJAR'))
+            ->when(! in_array($permission, ['dashboard.view', 'krama.view', 'krama.manage', 'change.verify', 'change.approve', 'letter.view', 'letter.verify', 'letter.approve', 'activity.view', 'attendance.record', 'billing.issue', 'dedosan.issue']), fn ($q) => $q->where('a.scope_type', 'BANJAR'))
             ->select('a.*')->get();
     }
 

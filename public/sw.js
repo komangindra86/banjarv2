@@ -17,3 +17,19 @@ self.addEventListener('fetch', event => {
         event.respondWith(caches.match(request).then(cached => cached || fetch(request)));
     }
 });
+self.addEventListener('push', event => {
+    // Payload is always generic (no identity/amount) per server-side redaction; safe to show on a locked screen.
+    let data = { title: 'Notifikasi Banjar', body: 'Ada tindakan baru menunggu Anda.', url: '/notifications' };
+    try {
+        if (event.data) data = { ...data, ...event.data.json() };
+    } catch { /* keep generic fallback */ }
+    event.waitUntil(self.registration.showNotification(data.title, { body: data.body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url: data.url } }));
+});
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    const target = event.notification.data?.url || '/notifications';
+    event.waitUntil(self.clients.matchAll({ type: 'window' }).then(clients => {
+        const existing = clients.find(c => c.url.endsWith(target));
+        return existing ? existing.focus() : self.clients.openWindow(target);
+    }));
+});

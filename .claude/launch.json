@@ -4,7 +4,7 @@
     {
       "name": "banjarv2",
       "runtimeExecutable": "C:\\laragon\\bin\\php\\php-8.2.27-Win32-vs16-x64\\php.exe",
-      "runtimeArgs": ["-S", "127.0.0.1:18915", "-t", "public", "vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php"],
+      "runtimeArgs": ["-S", "127.0.0.1:18915", "-t", "C:/laragon/www/banjarv2/public"],
       "port": 18915
     }
   ]

@@ -28,13 +28,14 @@ final class FinanceFixture
         app(CurrentBanjar::class)->set(DB::table('banjars')->find($tenant));
         $admin = User::where('email', 'admin-finance@example.test')->firstOrFail();
         $users = [];
-        foreach (['PETENGEN', 'KELIAN'] as $code) {
+        foreach (['PETENGEN', 'KELIAN', 'KESINOMAN'] as $code) {
             $user = User::factory()->create(['name' => $code.' QA', 'email' => strtolower($code).'-finance@example.test', 'password' => $password]);
             $member = DB::table('banjar_user_memberships')->insertGetId(['banjar_id' => $tenant, 'user_id' => $user->id, 'status' => 'ACTIVE']);
             DB::table('tenant_role_assignments')->insert(['banjar_id' => $tenant, 'membership_id' => $member, 'role_id' => DB::table('roles')->where('code', $code)->value('id'), 'scope_type' => 'BANJAR']);
             $users[$code] = $user->id;
         }
         $treasurer = User::findOrFail($users['PETENGEN']);
+        $kesinoman = User::findOrFail($users['KESINOMAN']);
         $krama = app(KramaManager::class);
         $people = [];
         for ($i = 1; $i <= 3; $i++) {
@@ -43,10 +44,11 @@ final class FinanceFixture
         }
         $finance = app(FinanceManager::class);
         $account = $finance->account($treasurer, ['name' => 'Kas tunai Banjar']);
-        $type = $finance->billingType($treasurer, ['name' => 'Iuran bulanan', 'kind' => 'IURAN', 'default_amount' => 50000]);
-        $event = $finance->event($treasurer, ['billing_type_id' => $type, 'title' => 'Iuran September 2026', 'reference' => 'IURAN-2026-09']);
-        $dedosanType = $finance->billingType($treasurer, ['name' => 'Dedosan kegiatan', 'kind' => 'DEDOSAN', 'default_amount' => 100000]);
-        $dedosan = $finance->event($treasurer, ['billing_type_id' => $dedosanType, 'title' => 'Dedosan pemeriksaan manual', 'reference' => 'DEDOSAN-QA-001']);
+        // Kesinoman menetapkan/menerbitkan iuran dan dedosan; Petengen mengelola kas (Master Prompt §27-29).
+        $type = $finance->billingType($kesinoman, ['name' => 'Iuran bulanan', 'kind' => 'IURAN', 'default_amount' => 50000]);
+        $event = $finance->event($kesinoman, ['billing_type_id' => $type, 'title' => 'Iuran September 2026', 'reference' => 'IURAN-2026-09']);
+        $dedosanType = $finance->billingType($kesinoman, ['name' => 'Dedosan kegiatan', 'kind' => 'DEDOSAN', 'default_amount' => 100000]);
+        $dedosan = $finance->event($kesinoman, ['billing_type_id' => $dedosanType, 'title' => 'Dedosan pemeriksaan manual', 'reference' => 'DEDOSAN-QA-001']);
 
         return compact('tenant', 'password', 'users', 'account', 'type', 'event', 'dedosan', 'people');
     }

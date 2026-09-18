@@ -34,7 +34,7 @@ class WithdrawalTest extends TestCase
 
     private WithdrawalManager $withdrawals;
 
-    private string $host = 'http://financeqa.banjar.localhost';
+    private string $host = 'http://financeqa.localhost';
 
     protected function beforeRefreshingDatabase(): void
     {
@@ -108,7 +108,7 @@ class WithdrawalTest extends TestCase
 
     private function tenantSession(User $user): self
     {
-        return $this->actingAs($user, 'web')->withSession(['auth_host' => 'financeqa.banjar.localhost', 'auth_context' => (string) $this->fixture['tenant']]);
+        return $this->actingAs($user, 'web')->withSession(['auth_host' => 'financeqa.localhost', 'auth_context' => (string) $this->fixture['tenant']]);
     }
 
     private function platformSession(User $user): self

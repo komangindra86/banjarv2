@@ -3,6 +3,7 @@
 namespace App\Modules\Krama;
 
 use App\Models\User;
+use App\Modules\Notification\NotificationManager;
 use App\Platform\Audit\Audit;
 use App\Platform\Identity\Access;
 use App\Platform\Modules\ModuleGate;
@@ -17,7 +18,7 @@ use Illuminate\Validation\ValidationException;
 
 final class ChangeManager
 {
-    public function __construct(private TenantQuery $query, private CurrentBanjar $tenant, private KramaAccess $scope, private Access $access, private KramaManager $manager, private Audit $audit) {}
+    public function __construct(private TenantQuery $query, private CurrentBanjar $tenant, private KramaAccess $scope, private Access $access, private KramaManager $manager, private Audit $audit, private NotificationManager $notifications) {}
 
     public function target(User $actor, int $id): object
     {
@@ -60,6 +61,7 @@ final class ChangeManager
             ]);
             DB::table('krama_change_items')->insert(['banjar_id' => $this->tenant->id(), 'request_id' => $request, 'field' => $field, 'old_value' => Crypt::encryptString(json_encode($old)), 'new_value' => Crypt::encryptString(json_encode($value)), 'created_at' => now(), 'updated_at' => now()]);
             $this->audit->record($this->tenant->id(), $actor->id, 'change.submitted', 'krama_change', $request);
+            $this->notifications->notifyPermission($this->tenant->id(), 'change.verify', 'change.submitted', 'Pengajuan perubahan data', 'Ada pengajuan perubahan data krama menunggu verifikasi.', '/admin/krama/changes');
 
             return $request;
         });
@@ -121,6 +123,9 @@ final class ChangeManager
             }
             $this->query->table('krama_change_requests')->where('id', $id)->update($update + ['status' => $status]);
             $this->audit->record($this->tenant->id(), $actor->id, 'change.'.strtolower($status), 'krama_change', $id, [], ['status' => $status]);
+            if ($status === 'VERIFIED') {
+                $this->notifications->notifyPermission($this->tenant->id(), 'change.approve', 'change.approval_pending', 'Perubahan data menunggu persetujuan', 'Ada pengajuan perubahan data menunggu persetujuan Kelian.', '/admin/krama/changes');
+            }
 
             return $status;
         });

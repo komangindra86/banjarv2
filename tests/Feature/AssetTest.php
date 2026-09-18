@@ -32,7 +32,7 @@ class AssetTest extends TestCase
 
     private AssetManager $assets;
 
-    private string $host = 'http://financeqa.banjar.localhost';
+    private string $host = 'http://financeqa.localhost';
 
     protected function beforeRefreshingDatabase(): void
     {
@@ -113,7 +113,7 @@ class AssetTest extends TestCase
 
     private function tenantLogin(User $user): self
     {
-        return $this->actingAs($user, 'web')->withSession(['auth_host' => 'financeqa.banjar.localhost', 'auth_context' => (string) $this->tenant]);
+        return $this->actingAs($user, 'web')->withSession(['auth_host' => 'financeqa.localhost', 'auth_context' => (string) $this->tenant]);
     }
 
     public function test_categories_and_locations_toggle_and_require_permission(): void

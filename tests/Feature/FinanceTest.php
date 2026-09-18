@@ -28,6 +28,8 @@ class FinanceTest extends TestCase
 
     private User $treasurer;
 
+    private User $kesinoman;
+
     private User $kelian;
 
     private int $a;
@@ -46,7 +48,7 @@ class FinanceTest extends TestCase
 
     private FinanceManager $finance;
 
-    private string $host = 'http://alpha.banjar.localhost';
+    private string $host = 'http://alpha.localhost';
 
     protected function beforeRefreshingDatabase(): void
     {
@@ -59,7 +61,7 @@ class FinanceTest extends TestCase
     {
         parent::setUp();
         $this->withoutVite();
-        config(['platform.host' => 'admin.banjar.localhost', 'platform.tenant_base_domain' => 'banjar.localhost']);
+        config(['platform.host' => 'admin.banjar.localhost', 'platform.tenant_base_domain' => 'localhost']);
         $this->seed(RoleSeeder::class);
         $this->super = User::factory()->create();
         DB::table('platform_role_assignments')->insert(['user_id' => $this->super->id, 'role_id' => DB::table('roles')->where('code', 'SUPER_ADMIN')->value('id')]);
@@ -70,6 +72,7 @@ class FinanceTest extends TestCase
         $this->admin = User::where('email', 'alpha@example.test')->firstOrFail();
         $this->context();
         $this->treasurer = $this->role('PETENGEN');
+        $this->kesinoman = $this->role('KESINOMAN');
         $this->kelian = $this->role('KELIAN');
         $krama = app(KramaManager::class);
         $this->household = $krama->household($this->admin, null, ['code' => 'KK-001', 'status' => 'ACTIVE']);
@@ -97,15 +100,15 @@ class FinanceTest extends TestCase
 
     private function login(?User $user = null): void
     {
-        $this->actingAs($user ?? $this->treasurer)->withSession(['auth_host' => 'alpha.banjar.localhost', 'auth_context' => (string) $this->a]);
+        $this->actingAs($user ?? $this->treasurer)->withSession(['auth_host' => 'alpha.localhost', 'auth_context' => (string) $this->a]);
     }
 
     private function event(string $kind = 'IURAN', array $overrides = []): int
     {
         $this->context();
-        $type = $this->finance->billingType($this->treasurer, ['name' => $kind.' '.Str::random(5), 'kind' => $kind, 'default_amount' => '25000']);
+        $type = $this->finance->billingType($this->kesinoman, ['name' => $kind.' '.Str::random(5), 'kind' => $kind, 'default_amount' => '25000']);
 
-        return $this->finance->event($this->treasurer, $overrides + ['billing_type_id' => $type, 'title' => 'Event '.$kind, 'reference' => (string) Str::uuid()]);
+        return $this->finance->event($this->kesinoman, $overrides + ['billing_type_id' => $type, 'title' => 'Event '.$kind, 'reference' => (string) Str::uuid()]);
     }
 
     private function payment(array $extra = []): array
@@ -116,7 +119,7 @@ class FinanceTest extends TestCase
     private function bill(): int
     {
         $event = $this->event();
-        $this->finance->issue($this->treasurer, $event);
+        $this->finance->issue($this->kesinoman, $event);
 
         return DB::table('bills')->where('billing_event_id', $event)->value('id');
     }
@@ -145,14 +148,14 @@ class FinanceTest extends TestCase
     {
         $a = $this->event();
         $b = $this->event();
-        $this->finance->issue($this->treasurer, $a);
-        $this->finance->issue($this->treasurer, $a);
-        $this->finance->issue($this->treasurer, $b);
+        $this->finance->issue($this->kesinoman, $a);
+        $this->finance->issue($this->kesinoman, $a);
+        $this->finance->issue($this->kesinoman, $b);
         $this->assertSame(4, DB::table('bills')->count());
         $this->assertSame(50000, (int) DB::table('bills')->where('kk_id', $this->household)->sum('gross_amount'));
         DB::table('households')->where('id', $this->household)->update(['status' => 'INACTIVE', 'code' => 'CHANGED']);
         DB::table('billing_types')->update(['default_amount' => 90000]);
-        $this->finance->issue($this->treasurer, $a);
+        $this->finance->issue($this->kesinoman, $a);
         $this->assertDatabaseHas('bills', ['billing_event_id' => $a, 'kk_id' => $this->household, 'household_code' => 'KK-001', 'gross_amount' => 25000]);
         $this->assertSame(4, DB::table('bills')->count());
     }
@@ -175,7 +178,7 @@ class FinanceTest extends TestCase
             $this->assertStringContainsString('bill_amount', $e->getMessage());
         }
         foreach (['0', '-1', '2.5', '1e3', '1,000', '1000000000000'] as $amount) {
-            $this->invalid(fn () => $this->finance->billingType($this->treasurer, ['name' => 'Invalid', 'kind' => 'IURAN', 'default_amount' => $amount]));
+            $this->invalid(fn () => $this->finance->billingType($this->kesinoman, ['name' => 'Invalid', 'kind' => 'IURAN', 'default_amount' => $amount]));
         }
     }
 
@@ -184,10 +187,10 @@ class FinanceTest extends TestCase
         $id = $this->event('IURAN', ['reference' => 'KEMATIAN-A', 'banjar_id' => $this->b, 'status' => 'ISSUED', 'created_by' => $this->super->id]);
         $row = DB::table('billing_events')->find($id);
         $this->assertSame($this->a, $row->banjar_id);
-        $this->assertSame($this->treasurer->id, $row->created_by);
+        $this->assertSame($this->kesinoman->id, $row->created_by);
         $this->assertSame('DRAFT', $row->status);
         $this->assertSame(25000, $row->amount);
-        $this->invalid(fn () => $this->finance->event($this->treasurer, ['billing_type_id' => $row->billing_type_id, 'title' => 'Duplicate', 'reference' => 'KEMATIAN-A']));
+        $this->invalid(fn () => $this->finance->event($this->kesinoman, ['billing_type_id' => $row->billing_type_id, 'title' => 'Duplicate', 'reference' => 'KEMATIAN-A']));
         $this->assertSame(1, DB::table('billing_events')->count());
     }
 
@@ -196,7 +199,7 @@ class FinanceTest extends TestCase
         $unit = DB::table('organizational_units')->insertGetId(['banjar_id' => $this->a, 'name' => 'Tempekan', 'type' => 'TEMPEKAN']);
         DB::table('household_unit_memberships')->insert(['banjar_id' => $this->a, 'household_id' => $this->household, 'unit_id' => $unit]);
         $event = $this->event('IURAN', ['target' => 'UNIT', 'unit_id' => $unit]);
-        $this->finance->issue($this->treasurer, $event);
+        $this->finance->issue($this->kesinoman, $event);
         $this->assertSame([$this->household], DB::table('bills')->pluck('kk_id')->all());
     }
 
@@ -204,7 +207,7 @@ class FinanceTest extends TestCase
     {
         $event = $this->event();
         DB::table('households')->update(['status' => 'INACTIVE']);
-        $this->invalid(fn () => $this->finance->issue($this->treasurer, $event));
+        $this->invalid(fn () => $this->finance->issue($this->kesinoman, $event));
         $this->assertDatabaseHas('billing_events', ['id' => $event, 'status' => 'DRAFT']);
         $this->assertDatabaseCount('bills', 0);
     }
@@ -212,14 +215,14 @@ class FinanceTest extends TestCase
     public function test_dedosan_requires_reason_one_individual_per_household_and_review_before_issue(): void
     {
         $event = $this->event('DEDOSAN');
-        $this->invalid(fn () => $this->finance->subject($this->treasurer, $event, ['subject_krama_id' => $this->person, 'reason' => '']));
-        $this->finance->subject($this->treasurer, $event, ['subject_krama_id' => $this->person, 'kk_id' => $this->second, 'reason' => 'Alasan privat hasil pemeriksaan manual']);
-        $this->invalid(fn () => $this->finance->subject($this->treasurer, $event, ['subject_krama_id' => $this->sibling, 'reason' => 'Alasan individu kedua']));
-        $this->invalid(fn () => $this->finance->issue($this->treasurer, $event));
+        $this->invalid(fn () => $this->finance->subject($this->kesinoman, $event, ['subject_krama_id' => $this->person, 'reason' => '']));
+        $this->finance->subject($this->kesinoman, $event, ['subject_krama_id' => $this->person, 'kk_id' => $this->second, 'reason' => 'Alasan privat hasil pemeriksaan manual']);
+        $this->invalid(fn () => $this->finance->subject($this->kesinoman, $event, ['subject_krama_id' => $this->sibling, 'reason' => 'Alasan individu kedua']));
+        $this->invalid(fn () => $this->finance->issue($this->kesinoman, $event));
         $this->finance->review($this->kelian, $event, ['action' => 'approve', 'review_note' => 'Telah diperiksa bersama']);
-        $this->forbidden(fn () => $this->finance->subject($this->treasurer, $event, ['subject_krama_id' => $this->sibling, 'reason' => 'Mengubah setelah disetujui']), 409);
-        $this->finance->issue($this->treasurer, $event);
-        $this->finance->issue($this->treasurer, $event);
+        $this->forbidden(fn () => $this->finance->subject($this->kesinoman, $event, ['subject_krama_id' => $this->sibling, 'reason' => 'Mengubah setelah disetujui']), 409);
+        $this->finance->issue($this->kesinoman, $event);
+        $this->finance->issue($this->kesinoman, $event);
         $bill = DB::table('bills')->first();
         $this->assertSame($this->person, $bill->subject_krama_id);
         $this->assertSame($this->household, $bill->kk_id);
@@ -232,27 +235,27 @@ class FinanceTest extends TestCase
     public function test_dedosan_rechecks_master_membership_and_policy_is_snapshotted(): void
     {
         $event = $this->event('DEDOSAN');
-        $this->finance->subject($this->treasurer, $event, ['subject_krama_id' => $this->person, 'reason' => 'Pemeriksaan manual']);
+        $this->finance->subject($this->kesinoman, $event, ['subject_krama_id' => $this->person, 'reason' => 'Pemeriksaan manual']);
         $this->finance->policy($this->admin, ['dedosan_requires_approval' => false]);
-        $this->invalid(fn () => $this->finance->issue($this->treasurer, $event));
+        $this->invalid(fn () => $this->finance->issue($this->kesinoman, $event));
         $this->finance->review($this->kelian, $event, ['action' => 'approve', 'review_note' => 'Pemeriksaan selesai']);
         DB::table('krama')->where('id', $this->person)->update(['household_id' => $this->second]);
-        $this->invalid(fn () => $this->finance->issue($this->treasurer, $event));
+        $this->invalid(fn () => $this->finance->issue($this->kesinoman, $event));
         $this->assertDatabaseCount('bills', 0);
         $next = $this->event('DEDOSAN');
-        $this->finance->subject($this->treasurer, $next, ['subject_krama_id' => $this->person, 'reason' => 'Pemeriksaan kejadian baru']);
-        $this->finance->issue($this->treasurer, $next);
+        $this->finance->subject($this->kesinoman, $next, ['subject_krama_id' => $this->person, 'reason' => 'Pemeriksaan kejadian baru']);
+        $this->finance->issue($this->kesinoman, $next);
         $this->assertDatabaseHas('bills', ['billing_event_id' => $next, 'kk_id' => $this->second]);
     }
 
     public function test_rejected_dedosan_cannot_issue_and_creator_cannot_approve_even_with_two_roles(): void
     {
         $event = $this->event('DEDOSAN');
-        $this->finance->subject($this->treasurer, $event, ['subject_krama_id' => $this->person, 'reason' => 'Pemeriksaan manual']);
-        DB::table('tenant_role_assignments')->insert(['banjar_id' => $this->a, 'membership_id' => DB::table('banjar_user_memberships')->where('user_id', $this->treasurer->id)->value('id'), 'role_id' => DB::table('roles')->where('code', 'KELIAN')->value('id'), 'scope_type' => 'BANJAR']);
-        $this->forbidden(fn () => $this->finance->review($this->treasurer, $event, ['action' => 'approve', 'review_note' => 'Menyetujui sendiri']));
+        $this->finance->subject($this->kesinoman, $event, ['subject_krama_id' => $this->person, 'reason' => 'Pemeriksaan manual']);
+        DB::table('tenant_role_assignments')->insert(['banjar_id' => $this->a, 'membership_id' => DB::table('banjar_user_memberships')->where('user_id', $this->kesinoman->id)->value('id'), 'role_id' => DB::table('roles')->where('code', 'KELIAN')->value('id'), 'scope_type' => 'BANJAR']);
+        $this->forbidden(fn () => $this->finance->review($this->kesinoman, $event, ['action' => 'approve', 'review_note' => 'Menyetujui sendiri']));
         $this->finance->review($this->kelian, $event, ['action' => 'reject', 'review_note' => 'Alasan tidak memadai']);
-        $this->forbidden(fn () => $this->finance->issue($this->treasurer, $event), 409);
+        $this->forbidden(fn () => $this->finance->issue($this->kesinoman, $event), 409);
     }
 
     public function test_cash_posts_integer_money_idempotently_and_rejects_overspending(): void
@@ -322,13 +325,13 @@ class FinanceTest extends TestCase
         $bill = $this->bill();
         $event = DB::table('bills')->find($bill)->billing_event_id;
         $cash = $this->finance->settle($this->treasurer, $bill, $this->payment());
-        $this->invalid(fn () => $this->finance->void($this->treasurer, $event, ['reason' => 'Kejadian dibatalkan']));
+        $this->invalid(fn () => $this->finance->void($this->kesinoman, $event, ['reason' => 'Kejadian dibatalkan']));
         $this->finance->reverse($this->treasurer, $cash, ['reason' => 'Pembayaran dikembalikan']);
-        $this->finance->void($this->treasurer, $event, ['reason' => 'Kejadian dibatalkan']);
-        $this->finance->void($this->treasurer, $event, ['reason' => 'Kejadian dibatalkan']);
+        $this->finance->void($this->kesinoman, $event, ['reason' => 'Kejadian dibatalkan']);
+        $this->finance->void($this->kesinoman, $event, ['reason' => 'Kejadian dibatalkan']);
         $this->assertSame(2, DB::table('bills')->where('status', 'VOID')->count());
         $this->forbidden(fn () => $this->finance->settle($this->treasurer, $bill, $this->payment()), 409);
-        $this->forbidden(fn () => $this->finance->issue($this->treasurer, $event), 409);
+        $this->forbidden(fn () => $this->finance->issue($this->kesinoman, $event), 409);
     }
 
     public function test_tenant_isolation_on_read_write_relations_and_aggregates(): void
@@ -339,7 +342,7 @@ class FinanceTest extends TestCase
         $foreignType = DB::table('billing_types')->insertGetId(['banjar_id' => $this->b, 'name' => 'Beta', 'kind' => 'IURAN', 'default_amount' => 100]);
         $this->context();
         $this->forbidden(fn () => $this->finance->settle($this->treasurer, $bill, $this->payment(['cash_account_id' => $foreignAccount])), 404);
-        $this->forbidden(fn () => $this->finance->event($this->treasurer, ['billing_type_id' => $foreignType, 'title' => 'Wrong tenant', 'reference' => 'WRONG']), 404);
+        $this->forbidden(fn () => $this->finance->event($this->kesinoman, ['billing_type_id' => $foreignType, 'title' => 'Wrong tenant', 'reference' => 'WRONG']), 404);
         $this->login();
         $this->get($this->host.'/admin/finance')->assertOk()->assertDontSee('Beta PRIVATE');
         $this->get($this->host.'/admin/finance/cash?account='.$foreignAccount)->assertNotFound();
@@ -361,6 +364,8 @@ class FinanceTest extends TestCase
             $this->context();
             $this->forbidden(fn () => $this->finance->cash($user, $this->payment(['direction' => 'IN', 'amount' => '100', 'reason' => 'Tidak berwenang'])));
         }
+        // Bendahara mengelola kas, tapi tidak lagi otomatis berhak menetapkan tagihan hanya karena peran Petengen.
+        $this->forbidden(fn () => $this->finance->event($this->treasurer, ['billing_type_id' => 1, 'title' => 'Tanpa izin', 'reference' => 'NOPERM']));
         $this->login();
         DB::table('banjar_modules')->where('banjar_id', $this->a)->where('code', 'FINANCE')->update(['status' => 'INACTIVE']);
         $this->get($this->host.'/admin')->assertOk()->assertDontSee('href="/admin/finance"', false);
@@ -391,9 +396,12 @@ class FinanceTest extends TestCase
         $this->finance->settle($this->treasurer, $bill, $this->payment());
         $this->finance->cash($this->treasurer, $this->payment(['direction' => 'OUT', 'amount' => '10000', 'reason' => 'Pembelian barang']));
         $this->login();
-        foreach (['', '/cash', '/settings', '/bills', '/report', '/events/'.$event, '/events/create?type='.$type, '/bills/'.$bill] as $path) {
+        foreach (['', '/cash', '/settings', '/bills', '/report', '/events/'.$event, '/bills/'.$bill] as $path) {
             $this->get($this->host.'/admin/finance'.$path)->assertOk()->assertHeader('Cache-Control', 'max-age=0, no-store, private')->assertDontSee('1234567890123456');
         }
+        $this->login($this->kesinoman);
+        $this->get($this->host.'/admin/finance/events/create?type='.$type)->assertOk()->assertHeader('Cache-Control', 'max-age=0, no-store, private')->assertDontSee('1234567890123456');
+        $this->login();
         $this->get($this->host.'/admin/finance/report')->assertSee('Rp 25.000')->assertSee('Rp 10.000')->assertSee('Rp 15.000')->assertSee('seluruh periode');
         $this->get($this->host.'/admin/finance/report?from=2026-09-20&to=2026-09-01')->assertSessionHasErrors('to');
         $this->post($this->host.'/admin/finance/cash', $this->payment(['direction' => 'OUT', 'amount' => '999999', 'reason' => 'RAHASIA FINANSIAL']))->assertSessionHasErrors();
@@ -408,8 +416,8 @@ class FinanceTest extends TestCase
         }
         DB::table('households')->insert($rows);
         $event = $this->event();
-        $this->finance->issue($this->treasurer, $event);
-        $this->finance->issue($this->treasurer, $event);
+        $this->finance->issue($this->kesinoman, $event);
+        $this->finance->issue($this->kesinoman, $event);
         $this->assertSame(262, DB::table('bills')->count());
         $this->assertSame(262, DB::table('bills')->distinct()->count('kk_id'));
         $this->assertSame(6550000, (int) DB::table('bills')->sum('gross_amount'));

@@ -8,6 +8,7 @@
 @case('history')<path d="M3 11a9 9 0 1 1 2 7M3 5v6h6M12 7v5l3 2"/>@break
 @case('profile')<path d="M4 21h16M6 21V8l6-5 6 5v13M10 21v-6h4v6M9 10h6"/>@break
 @case('box')<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5M12 13v8"/>@break
+@case('bell')<path d="M6 8a6 6 0 1 1 12 0c0 4 1.5 5.5 2 6.5H4c.5-1 2-2.5 2-6.5Z"/><path d="M9.5 18a2.5 2.5 0 0 0 5 0"/>@break
 @default<path d="m3 10 9-7 9 7M5 9v11h5v-6h4v6h5V9"/>
 @endswitch
 </svg>

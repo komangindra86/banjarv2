@@ -80,7 +80,7 @@ class PaymentConcurrencyTest extends TestCase
         $fixture = FinanceFixture::create();
         DB::table('banjar_modules')->where('banjar_id', $fixture['tenant'])->where('code', 'PAYMENT')->update(['status' => 'ACTIVE']);
         $actor = User::findOrFail($fixture['users']['PETENGEN']);
-        app(FinanceManager::class)->issue($actor, $fixture['event']);
+        app(FinanceManager::class)->issue(User::findOrFail($fixture['users']['KESINOMAN']), $fixture['event']);
         $base = ['tenant' => $fixture['tenant'], 'actor' => $actor->id];
         $bill = DB::table('bills')->orderBy('id')->value('id');
         $create = $base + ['action' => 'payment-create', 'id' => $bill];

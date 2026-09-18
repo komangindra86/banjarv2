@@ -13,7 +13,7 @@ final class RoleSeeder extends Seeder
             'SUPER_ADMIN' => ['Super Admin Bali Santih', 'PLATFORM', ['platform.manage']],
             'ADMIN_BANJAR' => ['Admin Banjar', 'TENANT', ['dashboard.view', 'website.manage', 'activity.manage', 'settings.manage', 'audit.view', 'krama.view', 'krama.manage', 'units.manage', 'krama.configure', 'change.verify', 'letter.view', 'letter.configure', 'finance.view', 'finance.configure']],
             'KELIAN' => ['Kelian Adat', 'TENANT', ['dashboard.view', 'audit.view', 'krama.view', 'change.approve', 'letter.view', 'letter.approve', 'finance.view', 'dedosan.approve']],
-            'PETENGEN' => ['Petengen / Bendahara', 'TENANT', ['dashboard.view', 'finance.view', 'cash.manage', 'billing.issue', 'dedosan.issue']],
+            'PETENGEN' => ['Petengen / Bendahara', 'TENANT', ['dashboard.view', 'finance.view', 'cash.manage']],
             'PENYARIKAN' => ['Penyarikan / Sekretaris', 'TENANT', ['dashboard.view', 'website.manage', 'activity.manage', 'letter.view', 'letter.verify']],
             'KESINOMAN' => ['Kesinoman', 'TENANT', ['dashboard.view', 'krama.view', 'krama.manage', 'change.verify']],
             'KRAMA' => ['Krama', 'TENANT', ['dashboard.view', 'krama.self', 'letter.submit']],
@@ -47,6 +47,9 @@ final class RoleSeeder extends Seeder
             array_push($roles[$code][2], 'asset.view', 'asset.manage');
         }
         $roles['ADMIN_BANJAR'][2][] = 'asset.dispose';
+        // Fase 10: penetapan iuran/patus dan dedosan berpindah ke Kesinoman (kolektif, boleh dibatasi per unit).
+        // Petengen tetap mengelola kas/pelunasan/pencairan tanpa hak menetapkan tagihan.
+        array_push($roles['KESINOMAN'][2], 'billing.issue', 'dedosan.issue');
         foreach ($roles as $code => [$name, $scope, $permissions]) {
             DB::table('roles')->updateOrInsert(['code' => $code], compact('name', 'scope'));
             $role = DB::table('roles')->where('code', $code)->value('id');

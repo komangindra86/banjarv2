@@ -3,6 +3,7 @@
 namespace App\Modules\Administration;
 
 use App\Models\User;
+use App\Modules\Notification\NotificationManager;
 use App\Platform\Audit\Audit;
 use App\Platform\Tenancy\CurrentBanjar;
 use App\Platform\Tenancy\TenantQuery;
@@ -17,7 +18,7 @@ final class LetterManager
 {
     public const STATUSES = ['SUBMITTED' => 'Menunggu Penyarikan', 'VERIFIED' => 'Menunggu Kelian', 'ISSUED' => 'Terbit', 'REJECTED' => 'Ditolak', 'CANCELLED' => 'Dibatalkan', 'CONFLICT' => 'Data sudah berubah'];
 
-    public function __construct(private TenantQuery $query, private CurrentBanjar $tenant, private LetterAccess $access, private Audit $audit) {}
+    public function __construct(private TenantQuery $query, private CurrentBanjar $tenant, private LetterAccess $access, private Audit $audit, private NotificationManager $notifications) {}
 
     public function services(): Builder
     {
@@ -104,6 +105,7 @@ final class LetterManager
                 'created_at' => now(), 'updated_at' => now(),
             ]);
             $this->step($id, $actor, 'SUBMITTED');
+            $this->notifications->notifyPermission($this->tenant->id(), 'letter.verify', 'letter.submitted', 'Surat baru', 'Ada pengajuan surat menunggu verifikasi.', '/admin/letters');
 
             return $id;
         });
@@ -139,6 +141,8 @@ final class LetterManager
             $this->step($id, $actor, $status, $data['review_note'] ?? null);
             if ($status === 'ISSUED') {
                 $this->issue($row, $actor, $person, $household);
+            } elseif ($status === 'VERIFIED') {
+                $this->notifications->notifyPermission($this->tenant->id(), 'letter.approve', 'letter.approval_pending', 'Surat menunggu persetujuan', 'Ada surat yang menunggu persetujuan Kelian.', '/admin/letters');
             }
 
             return $status;

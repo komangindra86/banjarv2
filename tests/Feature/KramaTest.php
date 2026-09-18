@@ -30,7 +30,7 @@ class KramaTest extends TestCase
 
     private int $b;
 
-    private string $host = 'http://alpha.banjar.localhost';
+    private string $host = 'http://alpha.localhost';
 
     protected function beforeRefreshingDatabase(): void
     {
@@ -43,7 +43,7 @@ class KramaTest extends TestCase
     {
         parent::setUp();
         $this->withoutVite();
-        config(['platform.host' => 'admin.banjar.localhost', 'platform.tenant_base_domain' => 'banjar.localhost']);
+        config(['platform.host' => 'admin.banjar.localhost', 'platform.tenant_base_domain' => 'localhost']);
         $this->seed(RoleSeeder::class);
         $this->super = User::factory()->create();
         DB::table('platform_role_assignments')->insert(['user_id' => $this->super->id, 'role_id' => DB::table('roles')->where('code', 'SUPER_ADMIN')->value('id')]);
@@ -63,7 +63,7 @@ class KramaTest extends TestCase
     private function login(?User $user = null): void
     {
         $user ??= $this->admin;
-        $this->actingAs($user)->withSession(['auth_host' => 'alpha.banjar.localhost', 'auth_context' => (string) $this->a]);
+        $this->actingAs($user)->withSession(['auth_host' => 'alpha.localhost', 'auth_context' => (string) $this->a]);
     }
 
     private function role(string $role, ?int $unit = null, bool $descendants = false): User

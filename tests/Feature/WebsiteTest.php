@@ -27,7 +27,7 @@ class WebsiteTest extends TestCase
 
     private User $admin;
 
-    private string $host = 'http://alpha.banjar.localhost';
+    private string $host = 'http://alpha.localhost';
 
     protected function beforeRefreshingDatabase(): void
     {
@@ -40,7 +40,7 @@ class WebsiteTest extends TestCase
     {
         parent::setUp();
         $this->withoutVite();
-        config(['platform.host' => 'admin.banjar.localhost', 'platform.tenant_base_domain' => 'banjar.localhost', 'app.url' => 'http://admin.banjar.localhost:18915']);
+        config(['platform.host' => 'admin.banjar.localhost', 'platform.tenant_base_domain' => 'localhost', 'app.url' => 'http://admin.banjar.localhost:18915']);
         $this->seed(RoleSeeder::class);
         $super = User::factory()->create(['status' => 'ACTIVE']);
         DB::table('platform_role_assignments')->insert(['user_id' => $super->id, 'role_id' => DB::table('roles')->where('code', 'SUPER_ADMIN')->value('id')]);
@@ -81,8 +81,8 @@ class WebsiteTest extends TestCase
         $this->content('pengumuman', ['title' => 'Rahasia Beta'], $this->b);
         $this->get($this->host.'/')->assertOk()->assertSee('Kabar Alpha')->assertDontSee('Rahasia Beta');
         $this->get($this->host.'/pengumuman/informasi-pengumuman')->assertOk()->assertSee('&lt;script&gt;alert(1)&lt;/script&gt;', false)->assertDontSee('<script>alert(1)</script>', false)->assertSee('https://wa.me/', false);
-        $this->get('http://beta.banjar.localhost/pengumuman/informasi-pengumuman')->assertOk()->assertSee('Rahasia Beta')->assertDontSee('Kabar Alpha');
-        $this->get('http://unknown.banjar.localhost/')->assertNotFound();
+        $this->get('http://beta.localhost/pengumuman/informasi-pengumuman')->assertOk()->assertSee('Rahasia Beta')->assertDontSee('Kabar Alpha');
+        $this->get('http://unknown.localhost/')->assertNotFound();
         $this->get('http://admin.banjar.localhost/profil')->assertNotFound();
         $this->get('http://admin.banjar.localhost/pengumuman')->assertNotFound();
     }
@@ -184,7 +184,7 @@ class WebsiteTest extends TestCase
         $this->get($this->host.'/media/'.$pdf)->assertOk()->assertHeader('Content-Disposition', 'attachment; filename=berkas-'.$pdf.'.pdf');
         $this->patch($this->host.'/admin/profile', ['description' => 'Cerita alpha', 'logo_id' => $photo, 'latitude' => -8.65, 'longitude' => 115.2])->assertRedirect()->assertSessionHasNoErrors();
         $this->get($this->host.'/profil')->assertOk()->assertSee('Cerita alpha')->assertSee('https://www.google.com/maps/search/', false);
-        $this->get('http://beta.banjar.localhost/profil')->assertOk()->assertDontSee('Cerita alpha');
+        $this->get('http://beta.localhost/profil')->assertOk()->assertDontSee('Cerita alpha');
         $this->patch($this->host.'/admin/profile', ['latitude' => 100, 'longitude' => 115])->assertSessionHasErrors('latitude');
     }
 
@@ -244,10 +244,10 @@ class WebsiteTest extends TestCase
     {
         $this->content('berita');
         DB::table('tenant_domains')->insert(['banjar_id' => $this->a, 'domain' => 'alias.example.test', 'verification_status' => 'VERIFIED', 'verified_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
-        $this->withHeader('X-Forwarded-Host', 'evil.test')->get('http://alias.example.test/berita/informasi-berita')->assertOk()->assertSee('http://alpha.banjar.localhost:18915/berita/informasi-berita', false)->assertDontSee('evil.test')->assertDontSee('alias.example.test');
-        $this->get($this->host.'/sitemap.xml')->assertOk()->assertHeader('Content-Type', 'application/xml; charset=UTF-8')->assertSee('http://alpha.banjar.localhost:18915/berita/informasi-berita', false)->assertDontSee('/admin/');
+        $this->withHeader('X-Forwarded-Host', 'evil.test')->get('http://alias.example.test/berita/informasi-berita')->assertOk()->assertSee('http://alpha.localhost:18915/berita/informasi-berita', false)->assertDontSee('evil.test')->assertDontSee('alias.example.test');
+        $this->get($this->host.'/sitemap.xml')->assertOk()->assertHeader('Content-Type', 'application/xml; charset=UTF-8')->assertSee('http://alpha.localhost:18915/berita/informasi-berita', false)->assertDontSee('/admin/');
         $this->login();
-        $this->get($this->host.'/admin/qr')->assertOk()->assertSee('data-url="http://alpha.banjar.localhost:18915"', false);
+        $this->get($this->host.'/admin/qr')->assertOk()->assertSee('data-url="http://alpha.localhost:18915"', false);
     }
 
     public function test_slug_uniqueness_and_wita_scheduling_validation(): void

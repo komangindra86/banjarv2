@@ -4,7 +4,7 @@ Tanggal: 15 September 2026
 Pemilik produk: PT Bali Santih Digital  
 Status: Fase 0 selesai; rancangan untuk implementasi bertahap, bukan aplikasi yang sudah berjalan.
 
-**Update 17 September 2026:** Fase 1–10 telah diimplementasikan dan diuji. Lihat [laporan Fase 1](PHASE_1_FOUNDATION.md), [laporan Fase 2](PHASE_2_WEBSITE.md), [laporan Fase 3](PHASE_3_KRAMA.md), [laporan Fase 4](PHASE_4_ADMINISTRATION.md), [laporan Fase 5](PHASE_5_FINANCE.md), [laporan Fase 6](PHASE_6_PAYMENT.md), [laporan Fase 7](PHASE_7_WITHDRAWAL.md), [laporan Fase 8](PHASE_8_ACTIVITY.md), [laporan Fase 9](PHASE_9_ASSET.md), [laporan Fase 10](PHASE_10_PORTAL.md), dan [panduan menjalankan](../README.md). Isi blueprint berikut adalah desain lintas fase; fitur di luar Fase 10 masih rencana.
+**Update 18 September 2026:** Fase 1–11 telah diimplementasikan dan diuji. Lihat [laporan Fase 1](PHASE_1_FOUNDATION.md), [laporan Fase 2](PHASE_2_WEBSITE.md), [laporan Fase 3](PHASE_3_KRAMA.md), [laporan Fase 4](PHASE_4_ADMINISTRATION.md), [laporan Fase 5](PHASE_5_FINANCE.md), [laporan Fase 6](PHASE_6_PAYMENT.md), [laporan Fase 7](PHASE_7_WITHDRAWAL.md), [laporan Fase 8](PHASE_8_ACTIVITY.md), [laporan Fase 9](PHASE_9_ASSET.md), [laporan Fase 10](PHASE_10_PORTAL.md), [laporan Fase 11](PHASE_11_DASHBOARD_NOTIFICATION.md), dan [panduan menjalankan](../README.md). Isi blueprint berikut adalah desain lintas fase; fitur di luar Fase 11 masih rencana.
 
 ## 1. Audit dan batas pekerjaan
 
@@ -345,7 +345,7 @@ Setiap fase menjalankan test terkait dan regresi fondasi tenant/permission. Fase
 
 - Target server Linux dengan Nginx/Apache, PHP-FPM 8.2+ yang kompatibel Laravel 12, Composer, Node untuk build Tailwind, MySQL/InnoDB; versi aktual diverifikasi pada Fase 1. Laravel tetap 12 sesuai master prompt; evaluasi dukungan keamanan sebelum produksi menjadi keputusan eksplisit, bukan upgrade diam-diam.
 - Satu artifact deployment melayani wildcard tenant, admin domain, dan webhook host. DNS/TLS production belum tersedia dan tidak dibuat di Fase 0.
-- Local Laragon memakai domain development seperti admin.banjar.test dan biaung.banjar.test melalui DNS/hosts lokal; HTTPS lokal dibutuhkan untuk uji PWA representatif. Ini usulan, bukan konfigurasi yang sudah dipasang.
+- Local Laragon memakai domain development seperti admin.banjar.localhost dan biaung.localhost melalui dukungan `.localhost` bawaan browser Chromium; HTTPS lokal dibutuhkan untuk uji PWA representatif. Konfigurasi aktual ada di `README.md`.
 - Database, queue worker, scheduler, dan file storage adalah service deployment yang sama secara logis. Database queue cukup awal; Redis opsional jika beban membutuhkannya.
 - Web root hanya public/, APP_DEBUG=false produksi, secrets bukan di Git, strict proxy config, session host-only, URL dibangun dari tenant_domains.
 - Scheduler satu pemicu dengan lock; worker restart setelah deploy dan membersihkan tenant context. Migrasi bertahap backward-compatible, backup sebelum migration berisiko, rollback aplikasi tidak menghapus ledger.
@@ -367,7 +367,7 @@ Setiap fase menjalankan test terkait dan regresi fondasi tenant/permission. Fase
 | 8 Kegiatan/presensi | Upgrade activities; targets/participants/attendance/candidates/minutes | Entity lama dipakai ulang, target dedup, dedosan melalui review — **selesai lokal, lihat docs/PHASE_8_ACTIVITY.md** |
 | 9 Aset | Inventory/loan/return/inspection/maintenance/opname/disposal | Quantity invariant dan histori tanpa destructive delete — **selesai lokal, lihat docs/PHASE_9_ASSET.md** |
 | 10 Portal krama | Satukan halaman keluarga, layanan, aktivitas, billing/QRIS/history/profil; migration hanya jika gap ditemukan | Kepemilikan data dan mobile/PWA teruji — **selesai lokal, lihat docs/PHASE_10_PORTAL.md** |
-| 11 Dashboard/notification | Dashboard per peran, notifications/deliveries/push subscriptions | Tindakan relevan sesuai scope dan delivery idempotent |
+| 11 Dashboard/notification | Dashboard per peran, notifications/deliveries/push subscriptions | Tindakan relevan sesuai scope dan delivery idempotent — **selesai lokal, lihat docs/PHASE_11_DASHBOARD_NOTIFICATION.md** |
 | 12 Production hardening | Audit keamanan, concurrency/reconciliation, DNS/TLS, backup, monitoring, runbooks | Bukti semua test kritis, restore drill dan kesiapan operasional |
 
 Setiap fase: baca blueprint → audit existing → rencana singkat/migration → implementasi → test/perbaikan → mobile review → dokumentasi → laporan. Jangan mengulang fitur fase sebelumnya. Jangan lanjut ke fase berikutnya tanpa instruksi. Tahap implementasi tidak mengubah business rules secara diam-diam.
@@ -397,4 +397,4 @@ Keputusan ini tidak menghalangi penyelesaian Fase 0. Sebelum fitur terkait diakt
 - Security, PWA, mandatory tests, deployment dan keputusan PO: bagian 13–18.
 - Tidak ada source aplikasi atau migration yang diimplementasikan pada Fase 0.
 
-**Catatan gerbang:** instruksi Fase 1–10 telah diberikan dan implementasinya selesai. Fase 11 menunggu instruksi Product Owner berikutnya.
+**Catatan gerbang:** instruksi Fase 1–11 telah diberikan dan implementasinya selesai. Fase 12 (Production hardening) menunggu instruksi Product Owner berikutnya.

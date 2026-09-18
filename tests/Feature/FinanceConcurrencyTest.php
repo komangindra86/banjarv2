@@ -77,7 +77,8 @@ class FinanceConcurrencyTest extends TestCase
     {
         $fixture = FinanceFixture::create();
         $base = ['tenant' => $fixture['tenant'], 'actor' => $fixture['users']['PETENGEN']];
-        $issue = $base + ['action' => 'issue', 'id' => $fixture['event']];
+        // Kesinoman menerbitkan tagihan; Petengen mencatat kas/pelunasan/pembalikan (Master Prompt §27-29).
+        $issue = array_replace($base, ['actor' => $fixture['users']['KESINOMAN']]) + ['action' => 'issue', 'id' => $fixture['event']];
         $this->assertSame(['SUCCESS', 'SUCCESS'], $this->race($issue, $issue));
         $this->assertDatabaseCount('bills', 3);
         $bill = DB::table('bills')->value('id');

@@ -31,7 +31,8 @@ final class WithdrawalFixture
                 'transaction_status' => $request->method() === 'POST' ? 'pending' : 'settlement', 'status_code' => '200', 'fraud_status' => 'accept']);
         });
         $treasurer = User::findOrFail($fixture['users']['PETENGEN']);
-        app(FinanceManager::class)->issue($treasurer, $fixture['event']);
+        $kesinoman = User::findOrFail($fixture['users']['KESINOMAN']);
+        app(FinanceManager::class)->issue($kesinoman, $fixture['event']);
         $submitter = self::platformUser();
         $approver = self::platformUser();
         foreach (DB::table('bills')->where('banjar_id', $fixture['tenant'])->where('status', 'UNPAID')->orderBy('id')->limit($paidBills)->pluck('id') as $bill) {

@@ -32,6 +32,8 @@ class ActivityTest extends TestCase
 
     private User $petengen;
 
+    private User $kesinoman;
+
     private User $kelian;
 
     private array $unit = [];
@@ -42,7 +44,7 @@ class ActivityTest extends TestCase
 
     private ActivityManager $activities;
 
-    private string $host = 'http://financeqa.banjar.localhost';
+    private string $host = 'http://financeqa.localhost';
 
     protected function beforeRefreshingDatabase(): void
     {
@@ -60,6 +62,7 @@ class ActivityTest extends TestCase
         DB::table('banjar_modules')->where('banjar_id', $this->tenant)->where('code', 'ACTIVITY')->update(['status' => 'ACTIVE']);
         $this->admin = User::where('email', 'admin-finance@example.test')->firstOrFail();
         $this->petengen = User::findOrFail($this->fixture['users']['PETENGEN']);
+        $this->kesinoman = User::findOrFail($this->fixture['users']['KESINOMAN']);
         $this->kelian = User::findOrFail($this->fixture['users']['KELIAN']);
         $this->penyarikan = $this->role('PENYARIKAN');
         $this->activities = app(ActivityManager::class);
@@ -151,7 +154,7 @@ class ActivityTest extends TestCase
 
     private function tenantLogin(User $user): self
     {
-        return $this->actingAs($user, 'web')->withSession(['auth_host' => 'financeqa.banjar.localhost', 'auth_context' => (string) $this->tenant]);
+        return $this->actingAs($user, 'web')->withSession(['auth_host' => 'financeqa.localhost', 'auth_context' => (string) $this->tenant]);
     }
 
     public function test_targets_are_a_deduplicated_union_for_person_and_household_basis(): void
@@ -298,6 +301,32 @@ class ActivityTest extends TestCase
         $this->rejected(fn () => $this->activities->configure($this->admin, $id, ['kind' => 'GENERAL', 'visibility' => 'PUBLIC', 'attendance_basis' => 'PERSON', 'allow_representative' => '1']), 409);
     }
 
+    public function test_bulk_decide_applies_multiple_candidates_atomically(): void
+    {
+        $id = $this->activity([], 'Ngayah bulk decide');
+        $this->activities->addTarget($this->admin, $id, ['target_type' => 'ORGANIZATIONAL_UNIT', 'unit_id' => $this->unit['T1'], 'include_descendants' => '1']);
+        $this->activities->generate($this->admin, $id);
+        $this->started($id);
+        $this->activities->markRemainingAbsent($this->penyarikan, $id);
+        $this->activities->verify($this->penyarikan, $id);
+        $candidates = app(DedosanCandidateManager::class);
+        $a = (int) DB::table('dedosan_candidates')->where('activity_id', $id)->where('household_id', $this->kk['A'])->value('id');
+        $b = (int) DB::table('dedosan_candidates')->where('activity_id', $id)->where('household_id', $this->kk['B'])->value('id');
+        // A batch with one invalid decision rejects the whole batch: nothing partially applies.
+        $this->invalid(fn () => $candidates->decideBulk($this->kesinoman, $id, ['decisions' => [
+            ['candidate_id' => $a, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']],
+            ['candidate_id' => $b, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']], // Made is not in household B
+        ]]), 'decisions');
+        $this->assertDatabaseHas('dedosan_candidates', ['id' => $a, 'status' => 'PENDING']);
+        $this->assertDatabaseHas('dedosan_candidates', ['id' => $b, 'status' => 'PENDING']);
+        $candidates->decideBulk($this->kesinoman, $id, ['decisions' => [
+            ['candidate_id' => $a, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']],
+            ['candidate_id' => $b, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Wayan'], 'note' => 'Wakil KK'],
+        ]]);
+        $this->assertDatabaseHas('dedosan_candidates', ['id' => $a, 'status' => 'SELECTED', 'responsible_krama_id' => $this->p['Ketut']]);
+        $this->assertDatabaseHas('dedosan_candidates', ['id' => $b, 'status' => 'SELECTED', 'responsible_krama_id' => $this->p['Wayan']]);
+    }
+
     public function test_candidates_become_a_reviewed_dedosan_event_with_one_individual_per_household(): void
     {
         $id = $this->activity([], 'Ngayah piodalan');
@@ -311,21 +340,23 @@ class ActivityTest extends TestCase
         $a = (int) DB::table('dedosan_candidates')->where('activity_id', $id)->where('household_id', $this->kk['A'])->value('id');
         $b = (int) DB::table('dedosan_candidates')->where('activity_id', $id)->where('household_id', $this->kk['B'])->value('id');
         $this->rejected(fn () => $candidates->decide($this->kelian, $id, $a, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']]), 403);
-        $this->invalid(fn () => $candidates->decide($this->petengen, $id, $b, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']]), 'responsible_krama_id');
-        $this->invalid(fn () => $candidates->decide($this->petengen, $id, $a, ['decision' => 'DISMISS']), 'note');
-        $candidates->decide($this->petengen, $id, $a, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']]);
+        // Kesinoman memutuskan calon dedosan dan menetapkan event (Master Prompt §29/§48); Petengen tidak lagi berwenang.
+        $this->rejected(fn () => $candidates->decide($this->petengen, $id, $a, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']]), 403);
+        $this->invalid(fn () => $candidates->decide($this->kesinoman, $id, $b, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']]), 'responsible_krama_id');
+        $this->invalid(fn () => $candidates->decide($this->kesinoman, $id, $a, ['decision' => 'DISMISS']), 'note');
+        $candidates->decide($this->kesinoman, $id, $a, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']]);
         $type = (int) DB::table('billing_types')->where('banjar_id', $this->tenant)->where('kind', 'DEDOSAN')->value('id');
-        $this->invalid(fn () => $candidates->createEvent($this->petengen, $id, ['billing_type_id' => $type]), 'billing_type_id');
-        $candidates->decide($this->petengen, $id, $b, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Wayan'], 'note' => 'Wakil KK']);
-        $event = $candidates->createEvent($this->petengen, $id, ['billing_type_id' => $type, 'amount' => '75000']);
-        $this->assertSame($event, $candidates->createEvent($this->petengen, $id, ['billing_type_id' => $type]));
+        $this->invalid(fn () => $candidates->createEvent($this->kesinoman, $id, ['billing_type_id' => $type]), 'billing_type_id');
+        $candidates->decide($this->kesinoman, $id, $b, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Wayan'], 'note' => 'Wakil KK']);
+        $event = $candidates->createEvent($this->kesinoman, $id, ['billing_type_id' => $type, 'amount' => '75000']);
+        $this->assertSame($event, $candidates->createEvent($this->kesinoman, $id, ['billing_type_id' => $type]));
         $this->assertDatabaseHas('billing_events', ['id' => $event, 'kind' => 'DEDOSAN', 'status' => 'DRAFT', 'reference' => 'DEDOSAN-KEG-'.$id, 'amount' => 75000]);
         $this->assertSame(2, DB::table('billing_event_subjects')->where('billing_event_id', $event)->distinct()->count('kk_id'));
         $this->assertDatabaseCount('bills', 0);
-        $this->rejected(fn () => $candidates->decide($this->petengen, $id, $a, ['decision' => 'RESET']), 409);
+        $this->rejected(fn () => $candidates->decide($this->kesinoman, $id, $a, ['decision' => 'RESET']), 409);
         // Phase 5 review and issue apply unchanged.
         app(FinanceManager::class)->review($this->kelian, $event, ['action' => 'approve', 'review_note' => 'Sesuai presensi terverifikasi']);
-        app(FinanceManager::class)->issue($this->petengen, $event);
+        app(FinanceManager::class)->issue($this->kesinoman, $event);
         $this->assertSame([$this->p['Ketut'], $this->p['Wayan']], DB::table('bills')->where('billing_event_id', $event)->orderBy('subject_krama_id')->pluck('subject_krama_id')->map(fn ($v) => (int) $v)->all());
     }
 
@@ -350,7 +381,7 @@ class ActivityTest extends TestCase
         foreach (['', '/'.$id, '/'.$id.'/attendance', '/'.$id.'/dedosan', '/'.$id.'/minutes'] as $path) {
             $this->tenantLogin($this->penyarikan)->get($this->host.'/admin/activities'.$path)->assertOk()->assertHeader('Cache-Control', 'max-age=0, no-store, private');
         }
-        $this->tenantLogin($this->petengen)->get($this->host.'/admin/activities/'.$id.'/dedosan')->assertOk()->assertSee('Buat event dedosan');
+        $this->tenantLogin($this->kesinoman)->get($this->host.'/admin/activities/'.$id.'/dedosan')->assertOk()->assertSee('Buat event dedosan');
         $this->tenantLogin($this->penyarikan)->get($this->host.'/admin/activities/'.$id.'/minutes')->assertOk()->assertSee('Iuran piodalan Rp50.000')->assertDontSee('Simpan notulen');
     }
 }

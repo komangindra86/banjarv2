@@ -8,8 +8,8 @@ Deployment pertama: 17 September 2026. Versi aplikasi: commit `5580195`.
 - VPS: `72.62.120.163`, Ubuntu 24.04, Nginx, PHP 8.3 FPM, MySQL 8.
 - `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://banjar.balisantih.com`.
 - `PLATFORM_HOST=banjar.balisantih.com`.
-- `TENANT_BASE_DOMAIN=banjar.balisantih.com`; calon alamat Banjar adalah `<slug>.banjar.balisantih.com`.
-- DNS, virtual host, dan SSL untuk subdomain tenant belum dipasang. Deployment ini melayani domain Super Admin saja. Siapkan DNS dan sertifikat tenant sebelum mengaktifkan penggunaan Banjar melalui domain tersebut.
+- Konfigurasi rilis terbaru menetapkan `TENANT_BASE_DOMAIN=balisantih.com`; calon alamat Banjar baru adalah `<slug>.balisantih.com`, sejalan dengan wildcard `*.balisantih.com` pada blueprint. Domain Super Admin dan domain tenant dikonfigurasi terpisah: pembuatan tenant menolak domain yang sama dengan `PLATFORM_HOST`, sehingga `banjar.balisantih.com` tidak dapat didaftarkan sebagai domain tenant.
+- DNS, virtual host, dan SSL untuk subdomain tenant belum dipasang oleh deployment ini. Siapkan DNS dan sertifikat tenant sebelum penggunaan publik. Saat deployment, set `TENANT_BASE_DOMAIN=balisantih.com` di environment produksi lalu perbarui cache konfigurasi. Perubahan ini berlaku untuk Banjar yang dibuat berikutnya; domain Banjar yang sudah tersimpan di database tetap dipertahankan.
 - Instalasi memakai database baru, tanpa mengimpor data demo lokal atau aplikasi Banjar lama.
 - Midtrans belum aktif dan email masih memakai mailer `log`.
 

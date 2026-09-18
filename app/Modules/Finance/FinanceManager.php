@@ -3,9 +3,11 @@
 namespace App\Modules\Finance;
 
 use App\Models\User;
+use App\Modules\Notification\NotificationManager;
 use App\Platform\Audit\Audit;
 use App\Platform\Tenancy\CurrentBanjar;
 use App\Platform\Tenancy\TenantQuery;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +22,25 @@ final class FinanceManager
 
     public const STATUSES = ['DRAFT' => 'Draf', 'APPROVED' => 'Disetujui', 'REJECTED' => 'Ditolak', 'ISSUED' => 'Terbit', 'VOID' => 'Dibatalkan', 'UNPAID' => 'Belum lunas', 'PAID' => 'Lunas'];
 
-    public function __construct(private TenantQuery $query, private CurrentBanjar $tenant, private FinanceAccess $access, private Audit $audit) {}
+    // Templat kategori Banjar Biaung (Master Prompt §26.3). Hanya dimuat lewat seedCategoryTemplate()
+    // atas permintaan eksplisit pengurus berizin, tidak pernah otomatis pada tenant baru.
+    public const BIAUNG_STARTER_CATEGORIES = [
+        ['name' => 'Pendapatan Rutin', 'kind' => 'IN'],
+        ['name' => 'Pendapatan Sewa/Kontrak', 'kind' => 'IN'],
+        ['name' => 'Pendapatan Lain-lain', 'kind' => 'IN'],
+        ['name' => 'Pengeluaran Rutin Banjar', 'kind' => 'OUT'],
+        ['name' => 'Pengeluaran Lain-lain Banjar', 'kind' => 'OUT'],
+        ['name' => 'Biaya Melasti', 'kind' => 'OUT'],
+        ['name' => 'Biaya Odalan Tumpek Wariga', 'kind' => 'OUT'],
+        ['name' => 'Biaya Pangrupukan & Atensi Nyepi', 'kind' => 'OUT'],
+        ['name' => 'Pura Dalem Wirasana', 'kind' => 'OUT'],
+        ['name' => 'Pura Bangun Sakti', 'kind' => 'OUT'],
+        ['name' => 'Pura Pengiangan', 'kind' => 'OUT'],
+        ['name' => 'Pura Ratu Gede Mas Mecaling', 'kind' => 'OUT'],
+        ['name' => 'Pura Khayangan', 'kind' => 'OUT'],
+    ];
+
+    public function __construct(private TenantQuery $query, private CurrentBanjar $tenant, private FinanceAccess $access, private Audit $audit, private NotificationManager $notifications) {}
 
     public static function money(int|string $amount): string
     {
@@ -69,7 +89,8 @@ final class FinanceManager
 
     public function account(User $actor, array $input): int
     {
-        $data = Validator::make($input, ['name' => ['required', 'string', 'max:100']])->validate();
+        $data = Validator::make($input, ['name' => ['required', 'string', 'max:100'], 'type' => ['nullable', Rule::in(['CASH', 'BANK'])]])->validate();
+        $data['type'] = $data['type'] ?? 'CASH';
 
         return $this->write($actor, 'cash.manage', function () use ($actor, $data) {
             if ($this->query->table('cash_accounts')->where('name', $data['name'])->exists()) {
@@ -106,6 +127,63 @@ final class FinanceManager
         });
     }
 
+    public function category(User $actor, array $input): int
+    {
+        $data = Validator::make($input, ['name' => ['required', 'string', 'max:100'], 'kind' => ['required', Rule::in(['IN', 'OUT'])], 'always_show' => ['nullable', 'boolean']])->validate();
+
+        return $this->write($actor, 'cash.manage', function () use ($actor, $data) {
+            if ($this->query->table('cash_transaction_categories')->where('name', $data['name'])->exists()) {
+                $this->fail('Nama kategori sudah digunakan.', 'name');
+            }
+            $id = $this->insert('cash_transaction_categories', ['name' => $data['name'], 'kind' => $data['kind'], 'always_show' => (bool) ($data['always_show'] ?? false), 'sort_order' => 0]);
+            $this->audit($actor, 'finance.category_created', 'cash_transaction_categories', $id, ['name' => $data['name'], 'kind' => $data['kind']]);
+
+            return $id;
+        });
+    }
+
+    public function toggleCategory(User $actor, int $id): void
+    {
+        $this->write($actor, 'cash.manage', function () use ($actor, $id) {
+            $row = $this->row('cash_transaction_categories', $id);
+            $this->query->table('cash_transaction_categories')->where('id', $id)->update(['is_active' => ! $row->is_active, 'updated_at' => now()]);
+            $this->audit($actor, 'finance.category_toggled', 'cash_transaction_categories', $id, ['status' => $row->is_active ? 'INACTIVE' : 'ACTIVE']);
+        });
+    }
+
+    public function seedCategoryTemplate(User $actor): int
+    {
+        return $this->write($actor, 'cash.manage', function () use ($actor) {
+            $count = 0;
+            foreach (self::BIAUNG_STARTER_CATEGORIES as $index => $category) {
+                if ($this->query->table('cash_transaction_categories')->where('name', $category['name'])->exists()) {
+                    continue;
+                }
+                $this->insert('cash_transaction_categories', ['name' => $category['name'], 'kind' => $category['kind'], 'sort_order' => $index, 'always_show' => true]);
+                $count++;
+            }
+            $this->audit($actor, 'finance.categories_seeded', 'banjars', $this->tenant->id(), ['count' => $count]);
+
+            return $count;
+        });
+    }
+
+    private function resolveCategory(?int $categoryId, string $direction): ?int
+    {
+        if ($categoryId === null) {
+            return null;
+        }
+        $category = $this->query->table('cash_transaction_categories')->where('id', $categoryId)->first();
+        if (! $category || ! $category->is_active) {
+            $this->fail('Pilih kategori yang aktif.', 'category_id');
+        }
+        if ($category->kind !== $direction) {
+            $this->fail('Kategori tidak sesuai dengan jenis transaksi.', 'category_id');
+        }
+
+        return $category->id;
+    }
+
     public function policy(User $actor, array $input): void
     {
         $data = Validator::make($input, ['dedosan_requires_approval' => ['required', 'boolean']])->validate();
@@ -138,13 +216,86 @@ final class FinanceManager
             if ($unitId !== null && ! $this->query->table('organizational_units')->where('id', $unitId)->where('is_active', true)->exists()) {
                 $this->fail('Pilih unit aktif milik Banjar ini.', 'unit_id');
             }
+            // Kesinoman ber-scope unit hanya boleh menargetkan wilayah aksesnya; "Semua KK Aktif" untuknya
+            // berarti aktif dalam scope, bukan seluruh Banjar. Dedosan tidak pakai target massal di sini
+            // (subjeknya dipilih individu per individu lewat subject()/bulkSubjects()).
+            $scope = $type->kind === 'DEDOSAN' ? null : $this->access->unitIds($actor, 'billing.issue');
+            if ($scope !== null && $target === 'UNIT' && ! in_array($unitId, $scope, true)) {
+                $this->fail('Unit di luar wilayah akses Anda.', 'unit_id');
+            }
+            $requiresApproval = $type->kind === 'DEDOSAN' && $this->query->table('banjar_settings')->value('dedosan_requires_approval');
             $id = $this->insert('billing_events', ['billing_type_id' => $type->id, 'kind' => $type->kind,
                 'amount' => $data['amount'] ?? $type->default_amount, 'title' => $data['title'], 'reference' => $data['reference'],
                 'due_date' => $data['due_date'] ?? null, 'target' => $target, 'unit_id' => $unitId, 'created_by' => $actor->id,
-                'requires_approval' => $type->kind === 'DEDOSAN' && $this->query->table('banjar_settings')->value('dedosan_requires_approval')]);
+                'requires_approval' => $requiresApproval, 'scope_unit_ids' => $scope === null ? null : json_encode($scope)]);
             $this->audit($actor, 'billing.event_created', 'billing_events', $id);
+            if ($type->kind !== 'DEDOSAN') {
+                $this->snapshotTargets($this->row('billing_events', $id));
+            }
+            if ($requiresApproval) {
+                $this->notifications->notifyPermission($this->tenant->id(), 'dedosan.approve', 'dedosan.approval_pending', 'Dedosan menunggu persetujuan', 'Ada event dedosan menunggu persetujuan Kelian.', '/admin/finance');
+            }
 
             return $id;
+        });
+    }
+
+    private function targetHouseholds(object $event): Builder
+    {
+        $households = $this->query->table('households')->where('status', 'ACTIVE');
+        if ($event->target === 'UNIT') {
+            $households->whereIn('id', $this->query->table('household_unit_memberships')->where('unit_id', $event->unit_id)->select('household_id'));
+        }
+        if ($event->scope_unit_ids !== null) {
+            $scope = json_decode($event->scope_unit_ids, true);
+            $households->whereIn('id', $this->query->table('household_unit_memberships')->whereIn('unit_id', $scope)->select('household_id'));
+        }
+
+        return $households;
+    }
+
+    // Menulis ulang snapshot KK sasaran. Dipanggil saat event dibuat dan lewat refreshTarget();
+    // issue() membaca dari tabel ini, bukan query live, agar penerbitan stabil terhadap perubahan keanggotaan.
+    private function snapshotTargets(object $event): void
+    {
+        $ids = $this->targetHouseholds($event)->pluck('id');
+        $this->query->table('billing_event_targets')->where('billing_event_id', $event->id)->delete();
+        foreach ($ids->chunk(500) as $chunk) {
+            DB::table('billing_event_targets')->insert($chunk->map(fn ($householdId) => [
+                'banjar_id' => $this->tenant->id(), 'billing_event_id' => $event->id, 'household_id' => $householdId,
+                'created_at' => now(), 'updated_at' => now(),
+            ])->all());
+        }
+        $this->query->table('billing_events')->where('id', $event->id)->update([
+            'target_kk_count' => $ids->count(), 'target_total_amount' => $ids->count() * $event->amount,
+            'target_snapshot_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+
+    // Hitungan KK & total nominal saat ini (tanpa menulis snapshot) — untuk banner "data berubah sejak pratinjau".
+    public function liveTargetCount(object $event): array
+    {
+        $count = $event->kind === 'DEDOSAN'
+            ? $this->query->table('billing_event_subjects')->where('billing_event_id', $event->id)->count()
+            : (clone $this->targetHouseholds($event))->count();
+
+        return ['count' => $count, 'total' => $count * $event->amount];
+    }
+
+    public function refreshTarget(User $actor, int $eventId): array
+    {
+        return $this->write($actor, 'billing.issue', function () use ($actor, $eventId) {
+            $event = $this->row('billing_events', $eventId);
+            abort_unless($event->kind !== 'DEDOSAN', 409);
+            abort_unless(in_array($event->status, ['DRAFT', 'APPROVED']), 409);
+            $this->snapshotTargets($event);
+            $refreshed = $this->row('billing_events', $eventId);
+            if ($refreshed->target_kk_count === 0) {
+                $this->fail('Tidak ada KK aktif untuk target ini.');
+            }
+            $this->audit($actor, 'billing.target_snapshotted', 'billing_events', $eventId, ['target_kk_count' => $refreshed->target_kk_count, 'target_total_amount' => $refreshed->target_total_amount]);
+
+            return ['target_kk_count' => $refreshed->target_kk_count, 'target_total_amount' => $refreshed->target_total_amount];
         });
     }
 
@@ -158,6 +309,10 @@ final class FinanceManager
             $household = $this->row('households', $person->household_id);
             if ($person->status !== 'ACTIVE' || $household->status !== 'ACTIVE') {
                 $this->fail('Individu dan KK harus aktif.');
+            }
+            $scope = $this->access->unitIds($actor, 'dedosan.issue');
+            if ($scope !== null && ! $this->query->table('household_unit_memberships')->where('household_id', $household->id)->whereIn('unit_id', $scope)->exists()) {
+                $this->fail('Individu di luar wilayah akses Anda.');
             }
             if ($this->query->table('billing_event_subjects')->where('billing_event_id', $eventId)->where('kk_id', $household->id)->exists()) {
                 $this->fail('KK ini sudah memiliki satu individu pada event dedosan ini.');
@@ -175,6 +330,70 @@ final class FinanceManager
             abort_unless($subject->billing_event_id === $eventId, 404);
             $this->query->table('billing_event_subjects')->where('id', $id)->delete();
             $this->audit($actor, 'dedosan.draft_subject_removed', 'billing_event_subjects', $id, ['billing_event_id' => $eventId]);
+        });
+    }
+
+    // Penetapan dedosan massal (checkbox lintas halaman/filter, Master Prompt §29.1). Satu transaksi,
+    // seluruh sasaran divalidasi ulang di backend; jika ada masalah apa pun, batch DITOLAK SELURUHNYA
+    // (tidak ada baris yang ditulis) sehingga tidak pernah terbit sebagian tanpa diketahui pengguna.
+    public function bulkSubjects(User $actor, int $eventId, array $input): void
+    {
+        $data = Validator::make($input, [
+            'krama_ids' => ['required', 'array', 'min:1', 'max:500'],
+            'krama_ids.*' => ['integer', 'distinct'],
+            'reason' => ['required', 'string', 'min:5', 'max:1000'],
+        ])->validate();
+
+        $this->write($actor, 'dedosan.issue', function () use ($actor, $eventId, $data) {
+            $event = $this->row('billing_events', $eventId);
+            abort_unless($event->kind === 'DEDOSAN' && $event->status === 'DRAFT', 409);
+            $scope = $this->access->unitIds($actor, 'dedosan.issue');
+            $existingKk = $this->query->table('billing_event_subjects')->where('billing_event_id', $eventId)->pluck('kk_id');
+            $errors = [];
+            $byHousehold = [];
+            foreach ($data['krama_ids'] as $kramaId) {
+                $person = $this->query->table('krama')->where('id', $kramaId)->first();
+                if (! $person || $person->status !== 'ACTIVE') {
+                    $errors[] = "Individu #{$kramaId} tidak aktif atau tidak ditemukan.";
+
+                    continue;
+                }
+                $household = $this->query->table('households')->where('id', $person->household_id)->first();
+                if (! $household || $household->status !== 'ACTIVE') {
+                    $errors[] = "KK dari individu {$person->name} tidak aktif.";
+
+                    continue;
+                }
+                if ($scope !== null) {
+                    $inScope = $this->query->table('household_unit_memberships')->where('household_id', $household->id)->whereIn('unit_id', $scope)->exists();
+                    if (! $inScope) {
+                        $errors[] = "Individu {$person->name} di luar wilayah akses Anda.";
+
+                        continue;
+                    }
+                }
+                if ($existingKk->contains($household->id)) {
+                    $errors[] = "KK {$household->code} sudah memiliki subjek pada event ini.";
+
+                    continue;
+                }
+                $byHousehold[$household->id][] = ['krama_id' => (int) $kramaId, 'name' => $person->name, 'household_code' => $household->code];
+            }
+            foreach ($byHousehold as $entries) {
+                if (count($entries) > 1) {
+                    $errors[] = 'KK '.$entries[0]['household_code'].' memiliki lebih dari satu individu terpilih ('.implode(', ', array_column($entries, 'name')).'). Pilih tepat satu penanggung jawab.';
+                }
+            }
+            if ($errors) {
+                throw ValidationException::withMessages(['selection' => $errors]);
+            }
+            $rows = [];
+            foreach ($byHousehold as $kkId => $entries) {
+                $rows[] = ['banjar_id' => $this->tenant->id(), 'billing_event_id' => $eventId, 'kk_id' => $kkId, 'subject_krama_id' => $entries[0]['krama_id'],
+                    'reason' => Crypt::encryptString($data['reason']), 'created_at' => now(), 'updated_at' => now()];
+            }
+            DB::table('billing_event_subjects')->insert($rows);
+            $this->audit($actor, 'dedosan.subjects_bulk_added', 'billing_events', $eventId, ['count' => count($rows)]);
         });
     }
 
@@ -226,11 +445,18 @@ final class FinanceManager
             $households = $this->query->table('households')->where('status', 'ACTIVE');
             if ($event->kind === 'DEDOSAN') {
                 $households->whereIn('id', $subjects->keys());
-            } elseif ($event->target === 'UNIT') {
-                if (! $this->row('organizational_units', $event->unit_id)->is_active) {
-                    $this->fail('Unit target sudah nonaktif.');
+            } else {
+                // Sumber kebenaran adalah snapshot yang dibekukan saat event dibuat/di-refresh, bukan
+                // query live: perubahan unit/keanggotaan setelah pratinjau tidak diam-diam mengubah tagihan.
+                if (! $event->target_snapshot_at) {
+                    $this->snapshotTargets($event);
+                    $event = $this->row('billing_events', $id);
                 }
-                $households->whereIn('id', $this->query->table('household_unit_memberships')->where('unit_id', $event->unit_id)->select('household_id'));
+                $targetIds = $this->query->table('billing_event_targets')->where('billing_event_id', $event->id)->pluck('household_id');
+                if ($targetIds->isEmpty()) {
+                    $this->fail('Tidak ada KK aktif untuk target ini.');
+                }
+                $households->whereIn('id', $targetIds);
             }
             if (! (clone $households)->exists()) {
                 $this->fail('Tidak ada KK aktif untuk target ini.');
@@ -267,21 +493,26 @@ final class FinanceManager
                 $this->fail('Event memiliki tagihan lunas. Balikkan pelunasan terlebih dahulu.');
             }
             $this->query->table('bills')->where('billing_event_id', $id)->update(['status' => 'VOID', 'updated_at' => now()]);
-            $this->query->table('billing_events')->where('id', $id)->update(['status' => 'VOID', 'void_reason' => Crypt::encryptString($data['reason']), 'updated_at' => now()]);
+            $this->query->table('billing_events')->where('id', $id)->update(['status' => 'VOID', 'void_reason' => Crypt::encryptString($data['reason']), 'voided_at' => now(), 'updated_at' => now()]);
             $this->audit($actor, 'billing.voided', 'billing_events', $id, ['status' => 'VOID']);
         });
     }
 
-    public function balance(int $accountId): int
+    public function balance(int $accountId, ?string $asOf = null): int
     {
-        return (int) $this->query->table('cash_transactions')->where('cash_account_id', $accountId)->selectRaw("COALESCE(SUM(CASE WHEN direction = 'IN' THEN CAST(amount AS SIGNED) ELSE -CAST(amount AS SIGNED) END), 0) AS balance")->value('balance');
+        $q = $this->query->table('cash_transactions')->where('cash_account_id', $accountId);
+        if ($asOf !== null) {
+            $q->where('transaction_date', '<=', $asOf);
+        }
+
+        return (int) $q->selectRaw("COALESCE(SUM(CASE WHEN direction = 'IN' THEN CAST(amount AS SIGNED) ELSE -CAST(amount AS SIGNED) END), 0) AS balance")->value('balance');
     }
 
     private function cashInput(array $input, bool $manual): array
     {
         return Validator::make($input, ['cash_account_id' => ['required', 'integer'], 'submission_key' => ['required', 'uuid'],
             'transaction_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:2000-01-01', 'before_or_equal:'.now('Asia/Makassar')->toDateString()],
-            'reference' => ['required', 'string', 'max:100'],
+            'reference' => ['required', 'string', 'max:100'], 'category_id' => ['nullable', 'integer'],
             ...($manual ? ['direction' => ['required', Rule::in(['IN', 'OUT'])], 'amount' => self::amountRules(), 'reason' => ['required', 'string', 'min:5', 'max:1000']] : [])])->validate();
     }
 
@@ -329,6 +560,7 @@ final class FinanceManager
             }
             $insert = $data;
             unset($insert['actor']);
+            $insert['category_id'] = $this->resolveCategory($insert['category_id'] ?? null, $data['direction']);
             $insert['reason'] = Crypt::encryptString($data['reason']);
 
             return $this->appendCash($actor, $insert, $data);
@@ -345,9 +577,20 @@ final class FinanceManager
             }
             $bill = $this->row('bills', $billId);
             abort_unless($bill->status === 'UNPAID', 409, 'Tagihan tidak dapat dilunasi lagi.');
+            // Tunai boleh "menang" atas QRIS yang masih pending/belum selesai (mis. warga membayar tunai setelah
+            // menampilkan QR tapi belum membayarnya). Bill dikunci begitu lunas (status UNPAID check di atas +
+            // idempotency submission_key), dan bila dana QRIS tetap masuk belakangan (race/notifikasi terlambat),
+            // PaymentManager::sync() sudah merutekannya ke bucket EXCEPTION sebagai kelebihan pembayaran yang
+            // direkonsiliasi manual — bukan dihilangkan, bukan melunasi dua kali, bukan pendapatan kedua.
+            // Peringatan "QRIS masih diproses" ditampilkan di halaman tagihan (lihat FinanceController::bill()),
+            // bukan sebagai blokir backend, agar tidak mengunci Petengen saat warga memang membayar tunai.
             $insert = $data;
             unset($insert['actor']);
-            $cashId = $this->appendCash($actor, $insert + ['direction' => 'IN', 'amount' => $bill->gross_amount, 'reason' => Crypt::encryptString('Pelunasan tagihan #'.$billId)], $data);
+            $insert['direction'] = 'IN';
+            $insert['amount'] = $bill->gross_amount;
+            $insert['category_id'] = $this->resolveCategory($insert['category_id'] ?? null, 'IN');
+            $insert['reason'] = Crypt::encryptString('Pelunasan tagihan #'.$billId);
+            $cashId = $this->appendCash($actor, $insert, $data);
             $this->insert('bill_settlements', ['bill_id' => $billId, 'method' => 'MANUAL', 'amount' => $bill->gross_amount, 'cash_transaction_id' => $cashId, 'created_by' => $actor->id]);
             $this->query->table('bills')->where('id', $billId)->update(['status' => 'PAID', 'updated_at' => now()]);
             $this->audit($actor, 'billing.settled', 'bills', $billId, ['status' => 'PAID', 'gross_amount' => $bill->gross_amount]);
@@ -368,7 +611,7 @@ final class FinanceManager
                 return $existing;
             }
             $insert = ['cash_account_id' => $original->cash_account_id, 'direction' => $original->direction === 'IN' ? 'OUT' : 'IN',
-                'amount' => $original->amount, 'transaction_date' => now('Asia/Makassar')->toDateString(), 'reason' => Crypt::encryptString($data['reason']),
+                'amount' => $original->amount, 'category_id' => $original->category_id, 'transaction_date' => now('Asia/Makassar')->toDateString(), 'reason' => Crypt::encryptString($data['reason']),
                 'reference' => 'REV-'.$id, 'source' => 'REVERSAL', 'bill_id' => $original->bill_id, 'reversal_of_id' => $id, 'submission_key' => (string) Str::uuid()];
             $reverseId = $this->appendCash($actor, $insert, $insert);
             if ($original->source === 'BILL') {

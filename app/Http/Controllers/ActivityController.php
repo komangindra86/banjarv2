@@ -145,6 +145,19 @@ final class ActivityController extends Controller
         return back()->with('success', 'Keputusan calon dedosan disimpan.');
     }
 
+    public function bulkDecide(Request $request, int $id, DedosanCandidateManager $manager)
+    {
+        // Baris tanpa keputusan dipilih ("Tidak diubah") tidak dikirim ke manager sama sekali —
+        // ini yang membedakan "disertakan dalam pengiriman ini" dari "dibiarkan seperti semula".
+        $decisions = collect($request->input('decisions', []))
+            ->filter(fn ($row) => ! empty($row['decision'] ?? null))
+            ->map(fn ($row, $candidateId) => (is_array($row) ? $row : []) + ['candidate_id' => (int) $candidateId])
+            ->values()->all();
+        $manager->decideBulk($request->user(), $id, ['decisions' => $decisions]);
+
+        return back()->with('success', 'Keputusan calon dedosan disimpan.');
+    }
+
     public function createEvent(Request $request, int $id, DedosanCandidateManager $manager)
     {
         $event = $manager->createEvent($request->user(), $id, $request->only(['billing_type_id', 'amount', 'due_date']));

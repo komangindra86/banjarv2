@@ -4,6 +4,7 @@ namespace App\Modules\Payment;
 
 use App\Models\User;
 use App\Modules\Finance\FinanceManager;
+use App\Modules\Notification\NotificationManager;
 use App\Platform\Audit\Audit;
 use App\Platform\Identity\Access;
 use App\Platform\Tenancy\CurrentBanjar;
@@ -28,7 +29,7 @@ final class WithdrawalManager
 
     public const OPEN = ['APPROVAL_PENDING', 'REQUESTED', 'PROCESSING'];
 
-    public function __construct(private PaymentAccess $payments, private Access $access, private CurrentBanjar $tenant, private LedgerService $ledger, private BankAccountManager $accounts, private WithdrawalProof $proofs, private Audit $audit) {}
+    public function __construct(private PaymentAccess $payments, private Access $access, private CurrentBanjar $tenant, private LedgerService $ledger, private BankAccountManager $accounts, private WithdrawalProof $proofs, private Audit $audit, private NotificationManager $notifications) {}
 
     public function visible(User $actor, int $id): object
     {
@@ -75,6 +76,9 @@ final class WithdrawalManager
             $this->ledger->postWithdrawal($withdrawal, 'reserve', ['AVAILABLE' => $amount], ['RESERVED' => $amount], $actor->id);
             $this->step($withdrawal, 'requested', null, $status, $actor, 'TENANT');
             $this->audit->record($tenant, $actor->id, 'withdrawal.requested', 'withdrawals', $id, [], ['amount' => $amount, 'status' => $status, 'bank_account_id' => $account->id, 'account_number_masked' => $account->account_number_masked]);
+            if ($status === 'APPROVAL_PENDING') {
+                $this->notifications->notifyPermission($tenant, 'withdrawal.approve', 'withdrawal.approval_pending', 'Pencairan menunggu persetujuan', 'Ada permintaan pencairan menunggu persetujuan Kelian.', '/admin/withdrawals');
+            }
 
             return $id;
         }, 3);
@@ -115,6 +119,9 @@ final class WithdrawalManager
             }
             $this->step($w, $to === 'REQUESTED' ? 'approved' : 'rejected', $w->status, $to, $actor, 'TENANT', $data['note'] ?? null);
             $this->audit->record($w->banjar_id, $actor->id, 'withdrawal.'.($to === 'REQUESTED' ? 'approved' : 'rejected'), 'withdrawals', $w->id, ['status' => $w->status], ['status' => $to]);
+            if ($to === 'CANCELLED') {
+                $this->notifications->notify((int) $w->banjar_id, (int) $w->requested_by, 'withdrawal.resolved', 'Pencairan ditolak', 'Permintaan pencairan Anda ditolak oleh Kelian.', '/admin/withdrawals');
+            }
         });
     }
 
@@ -199,6 +206,7 @@ final class WithdrawalManager
                 $this->ledger->postWithdrawal($w, 'paid', ['RESERVED' => (int) $w->amount], ['PAID_OUT' => (int) $w->amount], $actor->id);
                 $this->step($w, 'paid', 'PROCESSING', 'PAID', $actor, 'PLATFORM');
                 $this->audit->record($w->banjar_id, $actor->id, 'withdrawal.paid', 'withdrawals', $w->id, ['status' => 'PROCESSING'], ['status' => 'PAID', 'amount' => $w->amount]);
+                $this->notifications->notify((int) $w->banjar_id, (int) $w->requested_by, 'withdrawal.resolved', 'Pencairan selesai', 'Permintaan pencairan Anda telah ditransfer.', '/admin/withdrawals');
                 $keep = true;
             });
         } catch (Throwable $e) {
@@ -289,6 +297,9 @@ final class WithdrawalManager
         $this->ledger->postWithdrawal($w, 'release', ['RESERVED' => (int) $w->amount], ['AVAILABLE' => (int) $w->amount], $actor->id);
         $this->step($w, $action, $w->status, $to, $actor, $scope, $note);
         $this->audit->record($w->banjar_id, $actor->id, 'withdrawal.'.$action, 'withdrawals', $w->id, ['status' => $w->status], ['status' => $to, 'amount' => $w->amount]);
+        if ($scope === 'PLATFORM') {
+            $this->notifications->notify((int) $w->banjar_id, (int) $w->requested_by, 'withdrawal.resolved', 'Pencairan diproses', 'Permintaan pencairan Anda telah '.($to === 'FAILED' ? 'ditandai gagal' : 'dibatalkan').'.', '/admin/withdrawals');
+        }
     }
 
     private function step(object $w, string $action, ?string $from, string $to, User $actor, string $scope, ?string $note = null): void

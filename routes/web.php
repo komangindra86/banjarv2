@@ -8,6 +8,7 @@ use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\KramaController;
 use App\Http\Controllers\LetterController;
 use App\Http\Controllers\MembershipController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PlatformController;
 use App\Http\Controllers\PortalController;
@@ -51,6 +52,14 @@ Route::middleware(['access:tenant', 'module:ACTIVITY,ACTIVE', 'module:KRAMA'])->
 
 // Beranda degrades per card: reachable with only KRAMA active, each summary hidden if its own module/permission is missing.
 Route::middleware(['access:tenant', 'module:KRAMA'])->get('/portal/beranda', [PortalController::class, 'home']);
+
+Route::prefix('notifications')->middleware(['access:tenant', 'module:NOTIFICATION'])->group(function () {
+    Route::get('/', [NotificationController::class, 'index']);
+    Route::post('/{id}/read', [NotificationController::class, 'read'])->whereNumber('id');
+    Route::post('/read-all', [NotificationController::class, 'readAll']);
+    Route::post('/subscribe', [NotificationController::class, 'subscribe'])->middleware('throttle:10,1');
+    Route::post('/unsubscribe', [NotificationController::class, 'unsubscribe'])->middleware('throttle:10,1');
+});
 
 Route::prefix('portal')->middleware(['access:tenant', 'module:ADMINISTRATION', 'module:KRAMA'])->group(function () {
     Route::get('/', [LetterController::class, 'index']);
@@ -102,6 +111,14 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
         Route::get('/events/{id}', [FinanceController::class, 'event'])->whereNumber('id');
         Route::post('/events/{id}/subjects', [FinanceController::class, 'subject'])->whereNumber('id');
         Route::delete('/events/{id}/subjects/{subject}', [FinanceController::class, 'removeSubject'])->whereNumber(['id', 'subject']);
+        Route::post('/events/{id}/subjects/bulk', [FinanceController::class, 'bulkSubjects'])->whereNumber('id')->middleware('throttle:10,1');
+        Route::post('/events/{id}/refresh-target', [FinanceController::class, 'refreshTarget'])->whereNumber('id')->middleware('throttle:20,1');
+        Route::get('/events/{id}/candidates', [FinanceController::class, 'candidates'])->whereNumber('id');
+        Route::post('/events/{id}/candidates/toggle', [FinanceController::class, 'toggleCandidate'])->whereNumber('id')->middleware('throttle:120,1');
+        Route::post('/events/{id}/candidates/select-page', [FinanceController::class, 'selectPageCandidates'])->whereNumber('id')->middleware('throttle:60,1');
+        Route::post('/events/{id}/candidates/select-filtered', [FinanceController::class, 'selectFilteredCandidates'])->whereNumber('id')->middleware('throttle:20,1');
+        Route::post('/events/{id}/candidates/clear', [FinanceController::class, 'clearCandidates'])->whereNumber('id');
+        Route::get('/events/{id}/candidates/review', [FinanceController::class, 'reviewCandidates'])->whereNumber('id');
         Route::post('/events/{id}/review', [FinanceController::class, 'review'])->whereNumber('id');
         Route::post('/events/{id}/issue', [FinanceController::class, 'issue'])->whereNumber('id')->middleware('throttle:10,1');
         Route::post('/events/{id}/void', [FinanceController::class, 'void'])->whereNumber('id');
@@ -111,7 +128,18 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
         Route::get('/cash', [FinanceController::class, 'cash']);
         Route::post('/cash', [FinanceController::class, 'storeCash'])->middleware('throttle:30,1');
         Route::post('/cash/{id}/reverse', [FinanceController::class, 'reverse'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post('/categories', [FinanceController::class, 'storeCategory']);
+        Route::post('/categories/quick', [FinanceController::class, 'quickAddCategory']);
+        Route::post('/categories/{id}/toggle', [FinanceController::class, 'toggleCategory'])->whereNumber('id');
+        Route::post('/categories/seed-template', [FinanceController::class, 'seedCategoryTemplate']);
         Route::get('/report', [FinanceController::class, 'report']);
+        Route::get('/reports', [FinanceController::class, 'reports']);
+        Route::get('/reports/create', [FinanceController::class, 'createReport']);
+        Route::post('/reports', [FinanceController::class, 'storeReport'])->middleware('throttle:10,1');
+        Route::get('/reports/{id}', [FinanceController::class, 'reportShow'])->whereNumber('id');
+        Route::post('/reports/{id}/finalize', [FinanceController::class, 'finalizeReport'])->whereNumber('id')->middleware('throttle:5,1');
+        Route::post('/reports/{id}/revise', [FinanceController::class, 'reviseReport'])->whereNumber('id')->middleware('throttle:5,1');
+        Route::get('/reports/{id}/pdf', [FinanceController::class, 'downloadReportPdf'])->whereNumber('id');
     });
     Route::prefix('activities')->middleware(['module:ACTIVITY,ACTIVE', 'module:KRAMA'])->group(function () {
         Route::get('/', [ActivityController::class, 'index']);
@@ -126,6 +154,7 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
         Route::post('/{id}/verify', [ActivityController::class, 'verify'])->whereNumber('id');
         Route::get('/{id}/dedosan', [ActivityController::class, 'dedosan'])->whereNumber('id');
         Route::post('/{id}/dedosan/event', [ActivityController::class, 'createEvent'])->whereNumber('id')->middleware('throttle:10,1');
+        Route::post('/{id}/dedosan/bulk-decide', [ActivityController::class, 'bulkDecide'])->whereNumber('id')->middleware('throttle:10,1');
         Route::post('/{id}/dedosan/{candidate}', [ActivityController::class, 'decide'])->whereNumber(['id', 'candidate']);
         Route::get('/{id}/minutes', [ActivityController::class, 'minutes'])->whereNumber('id');
         Route::post('/{id}/minutes', [ActivityController::class, 'saveMinutes'])->whereNumber('id');

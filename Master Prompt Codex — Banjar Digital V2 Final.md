@@ -82,6 +82,8 @@ Strategi implementasi adalah:
 
 Banjar tidak boleh merasa harus belajar aplikasi besar sejak hari pertama.
 
+Target utama pengurus termasuk orang tua/lanjut usia yang belum terbiasa menggunakan aplikasi. Kemudahan penggunaan wajib menjadi kriteria penerimaan setiap modul: bahasa sehari-hari, tulisan dan tombol jelas, sedikit langkah, tanpa mengingat letak menu, serta tanpa kehilangan isian ketika perlu menambah data pendukung. Terapkan aturan operasional UX pada bagian 57–58.
+
 ---
 
 # 2. PRINSIP UTAMA
@@ -626,8 +628,8 @@ Fokus:
 - kas;
 - pemasukan;
 - pengeluaran;
-- iuran;
-- dedosan;
+- penerimaan dan rekonsiliasi pembayaran iuran/patus;
+- penerimaan dan rekonsiliasi pembayaran dedosan;
 - pembayaran;
 - pencairan dana;
 - laporan.
@@ -651,7 +653,11 @@ Fokus:
 - krama;
 - keluarga;
 - status krama;
-- perubahan data.
+- perubahan data;
+- penetapan iuran/patus secara kolektif per KK;
+- penetapan dedosan, termasuk pemilihan massal warga/krama melalui checkbox.
+
+Kesinoman adalah operator penetapan dan penerbitan tagihan iuran/patus serta dedosan dalam wilayah aksesnya. Petengen menangani penerimaan uang, pencatatan kas, rekonsiliasi, dan laporan. Hak menetapkan tagihan tidak otomatis memberikan hak mengelola kas atau pencairan. Persetujuan Kelian tetap berlaku bila diwajibkan kebijakan Banjar.
 
 Keempat fungsi inti ini harus tersedia sebagai role standard.
 
@@ -835,8 +841,8 @@ Petengen mengelola:
 - kas;
 - pemasukan;
 - pengeluaran;
-- iuran;
-- dedosan;
+- penerimaan pembayaran iuran/patus yang ditetapkan Kesinoman;
+- penerimaan pembayaran dedosan yang ditetapkan Kesinoman;
 - pembayaran;
 - saldo payment;
 - request pencairan;
@@ -846,11 +852,171 @@ Gunakan tipe data uang yang tepat.
 
 Jangan menggunakan floating point.
 
+## 26.1 Acuan hasil laporan
+
+Acuan format adalah dokumen pengguna **LAPORAN KEUANGAN BANJAR BIAUNG APRIL 2025.pdf**, dua halaman, dengan judul “LAPORAN KAS BANJAR BIAUNG” dan agenda “SANGKEP PEMACEKAN AGUNG / 28 APRIL 2025”.
+
+Lokasi referensi pada saat revisi: `E:/Users/Indra/Downloads/LAPORAN KEUANGAN BANJAR BIAUNG APRIL 2025.pdf`. Path ini hanya rujukan pengembangan, bukan dependensi runtime atau path yang harus tersedia di server.
+
+Gunakan dokumen sebagai contoh isi dan tata letak. Nama orang, nama rekening, kategori, tanggal, dan nominal di dalamnya bukan nilai yang boleh di-hardcode untuk semua Banjar. Jangan mengimpor transaksi contoh ke data operasional secara otomatis.
+
+Laporan wajib berisi rincian transaksi seperti contoh, bukan hanya kartu ringkasan saldo atau daftar status tagihan. Ringkasan dashboard tetap boleh tersedia sebagai pendamping.
+
+## 26.2 Input transaksi Petengen
+
+Alur utama: **Keuangan → Buku kas → Catat pemasukan / pengeluaran**.
+
+Form transaksi menyediakan:
+
+- tanggal transaksi;
+- jenis: pemasukan atau pengeluaran;
+- rekening kas/bank yang menerima atau mengeluarkan uang;
+- kategori laporan sesuai jenis transaksi;
+- keterangan transaksi yang cukup panjang untuk menjelaskan kegiatan, pihak terkait, dan periode pembayaran;
+- nominal rupiah bulat;
+- referensi bukti/kuitansi dan dukungan lampiran bukti privat;
+- hubungan ke tagihan atau kegiatan bila relevan, tanpa mewajibkannya untuk transaksi umum.
+
+### Format rupiah langsung saat mengetik
+
+Semua input nominal uang wajib menampilkan format rupiah secara otomatis saat pengguna mengetik, menempelkan nilai, atau mengubah nominal; jangan menunggu kolom kehilangan fokus atau formulir disimpan.
+
+- Tampilkan awalan **Rp** secara tetap di dekat angka dan pemisah ribuan berupa titik: mengetik `1000` tampil **Rp 1.000**, `50000` tampil **Rp 50.000**, dan `1500000` tampil **Rp 1.500.000**.
+- Pengguna cukup mengetik angka; awalan Rp tidak perlu diketik dan tidak mengganggu pengeditan. Gunakan keyboard numerik pada perangkat seluler.
+- Pertahankan posisi kursor secara wajar saat menyisipkan/menghapus angka di tengah, melakukan seleksi, mengganti nominal, atau memakai Backspace/Delete di dekat pemisah ribuan.
+- Dukung paste angka polos dan format rupiah Indonesia seperti `1500000`, `1.500.000`, atau `Rp 1.500.000`. Input pecahan, negatif, atau format ambigu harus ditolak dengan pesan yang jelas; jangan membuang koma/minus sehingga mengubah nilai uang tanpa diketahui pengguna.
+- Kolom kosong tetap kosong, bukan otomatis nol. Nilai nol hanya diterima pada kolom yang memang mengizinkannya. Terapkan batas nominal/digit sesuai aturan backend tanpa memangkas angka diam-diam.
+- Nilai awal dari database dan nilai yang muncul kembali setelah validasi gagal harus menggunakan format tampilan yang sama.
+- Format tampilan terpisah dari nilai yang dikirim: **Rp 1.500.000** dikirim dan disimpan sebagai integer rupiah `1500000`, tanpa awalan Rp atau titik. Backend tetap memvalidasi nominal, batas, dan izin; jangan menggunakan floating point atau hanya mengandalkan validasi browser.
+- Ganti petunjuk “tanpa titik atau koma” dengan petunjuk yang sesuai, misalnya “Ketik nominal, pemisah ribuan otomatis.”
+
+Gunakan komponen/perilaku yang konsisten untuk nominal pemasukan, pengeluaran, nominal standar tagihan/iuran/dedosan, nominal khusus event, pencairan, biaya gateway, dan biaya aset/perawatan. Jangan menerapkan format uang pada nomor rekening, NIK, nomor KK, nomor telepon, atau jumlah barang.
+
+Kriteria penerimaan: `1000` langsung terlihat sebagai **Rp 1.000** sebelum blur; paste **Rp 1.500.000** menghasilkan nilai kirim `1500000`; edit/hapus di tengah tetap nyaman; kolom opsional dapat dikosongkan; input tidak valid tidak berubah menjadi nominal berbeda secara diam-diam; validasi server dan pengiriman ulang setelah error tetap benar.
+
+Kategori laporan berbeda dari rekening kas/bank, billing type, dan unit organisasi. Contoh: “Biaya Melasti” adalah kategori pengeluaran; “BPD Bali” adalah rekening dana; Tempekan/Regu adalah unit organisasi.
+
+Pemasukan seperti sewa tanah, bunga bank, parkir, bantuan, dan dana punia harus bisa dicatat tanpa membuat tagihan KK terlebih dahulu. Pengeluaran dapat berupa biaya rutin, kegiatan, upacara, atau pura.
+
+Pelunasan tagihan manual otomatis menghasilkan satu transaksi penerimaan pada rekening yang dipilih dengan kategori yang sesuai. Hindari meminta Petengen mencatat pemasukan yang sama lagi. Pertahankan idempotency, audit, dan koreksi melalui pembalikan.
+
+Untuk Petengen, wilayah akses adalah Seluruh Banjar. Pada form pengurus, sembunyikan/nonaktifkan Unit tugas dan Sertakan unit turunannya ketika tidak berlaku. Pembatasan unit hanya tersedia bagi peran yang didukung; dropdown unit kosong harus menjelaskan bahwa belum ada unit aktif.
+
+## 26.3 Kategori dan kelompok laporan
+
+Kategori dimiliki masing-masing Banjar, memiliki jenis pemasukan/pengeluaran, nama, urutan tampil, status aktif, dan pilihan tetap ditampilkan saat nihil. Kategori yang sudah digunakan tidak boleh dihapus sehingga merusak riwayat.
+
+Pada kolom kategori transaksi, selalu sediakan tindakan **+ Tambah kategori** bagi pengurus berizin, termasuk saat daftar kosong atau pencarian tidak menemukan hasil. Petengen harus memiliki izin menambah kategori transaksi dalam Banjarnya tanpa harus membuka menu pengaturan atau mendapat hak administrasi umum. Gunakan panel/dialog sederhana di formulir yang sama; cukup minta nama kategori, sementara jenis pemasukan/pengeluaran mengikuti transaksi. Pengaturan lanjutan memakai default yang aman dan dapat diubah melalui pengelolaan kategori.
+
+Setelah kategori berhasil disimpan, perbarui daftar dan otomatis pilih kategori baru, lalu kembalikan fokus ke formulir transaksi. Nominal, tanggal, kas, keterangan, referensi, dan pilihan lain tetap utuh. Membatalkan atau gagal menambah kategori tidak boleh menghapus isian transaksi. Pembuatan kategori tidak otomatis menyimpan transaksi. Validasi duplikasi nama untuk jenis dan Banjar yang sama; tawarkan kategori yang sudah ada, bukan membuat duplikat atau memilihnya diam-diam. Ikuti pola umum bagian 58.
+
+Sediakan templat kategori Banjar Biaung yang dapat disesuaikan pengurus berizin:
+
+| Kelompok | Kategori |
+|---|---|
+| Pendapatan/Pemasukan | Pendapatan Rutin |
+| Pendapatan/Pemasukan | Pendapatan Sewa/Kontrak |
+| Pendapatan/Pemasukan | Pendapatan Lain-lain |
+| Pengeluaran/Biaya | Pengeluaran Rutin Banjar |
+| Pengeluaran/Biaya | Pengeluaran Lain-lain Banjar |
+| Pengeluaran/Biaya | Biaya Melasti |
+| Pengeluaran/Biaya | Biaya Odalan Tumpek Wariga |
+| Pengeluaran/Biaya | Biaya Pangrupukan & Atensi Nyepi |
+| Pengeluaran/Biaya | Pura Dalem Wirasana |
+| Pengeluaran/Biaya | Pura Bangun Sakti |
+| Pengeluaran/Biaya | Pura Pengiangan |
+| Pengeluaran/Biaya | Pura Ratu Gede Mas Mecaling |
+| Pengeluaran/Biaya | Pura Khayangan |
+
+Setiap kategori menampilkan rincian transaksi dan subtotal otomatis. Kategori yang disetel tetap tampil harus bertuliskan **NIHIL** ketika tidak memiliki transaksi periode tersebut. Perubahan nama/urutan kategori tidak boleh mengubah laporan yang sudah difinalkan.
+
+## 26.4 Periode sangkep dan saldo pindahan
+
+Laporan mendukung periode tanggal bebas, nama agenda/sangkep, tanggal sangkep, dan rujukan laporan sebelumnya. Jangan membatasi laporan pada bulan kalender: contoh berjudul April 2025 memuat transaksi sejak 19 Maret 2025 sampai menjelang sangkep 28 April 2025.
+
+Tampilkan baris **SALDO PINDAHAN SANGKEP TGL. ...** sebelum rincian periode. Saldo awal berasal dari penutupan sebelumnya atau saldo awal migrasi yang memiliki rincian dan bukti. Saldo awal tidak dihitung sebagai pendapatan periode berjalan.
+
+Definisikan batas penutupan secara eksplisit. Jika laporan sebelumnya dan transaksi berikutnya berada pada tanggal yang sama, simpan batas transaksi/keanggotaan periode yang stabil agar tidak ada transaksi terlewat atau masuk dua laporan. Jangan menebak batas hanya dari judul bulan atau tanggal saldo pindahan.
+
+Urutkan kategori sesuai konfigurasi; rincian di dalam kategori berurutan tanggal lalu nomor transaksi yang stabil. Transaksi bertanggal mundur setelah finalisasi memerlukan alur koreksi yang terlacak, bukan mengubah laporan final secara diam-diam.
+
+## 26.5 Susunan cetak dan PDF
+
+Sediakan **Pratinjau**, **Cetak**, dan **Unduh PDF** dari Keuangan → Laporan. Hasil PDF dihasilkan server dan menggunakan sumber data/perhitungan yang sama dengan pratinjau.
+
+Susunan mengikuti contoh:
+
+1. Judul tengah: LAPORAN KAS [NAMA BANJAR].
+2. Subjudul nama sangkep/agenda dan tanggal; keterangan “dalam rupiah”.
+3. Tabel berkolom **TGL. | KETERANGAN | MASUK | KELUAR | SALDO**.
+4. Baris saldo pindahan, kelompok PENDAPATAN/PEMASUKAN beserta kategori/rinciannya, lalu kelompok PENGELUARAN/BIAYA beserta kategori/rinciannya.
+5. Baris **TOTAL SALDO/KAS** berisi total masuk, total keluar, dan saldo akhir sesuai basis laporan yang dinyatakan.
+6. Bagian **POSISI DANA** berisi rincian rekening dan piutang serta total.
+7. Blok **Yang Membuat** untuk Petengen/Bendahara dan **Mengetahui** untuk Kelian Adat, disertai nama dan ruang tanda tangan.
+
+Pada format acuan, nominal tiap transaksi berada di kolom Masuk atau Keluar; kolom Saldo memuat saldo pindahan, subtotal pada baris kategori, dan saldo akhir. Subtotal kategori bukan saldo berjalan. Bedakan label/formatnya dengan jelas; subtotal tidak boleh dijumlahkan lagi sebagai transaksi.
+
+Gunakan tabel bergaris, judul tebal, latar lembut untuk pemisah kelompok, nominal rata kanan, dan keterangan yang dapat membungkus. Subtotal pemasukan dapat berwarna biru dan pengeluaran merah seperti contoh, tetapi cetakan hitam-putih tetap harus terbaca. Format rupiah konsisten tanpa desimal, dengan pemisah ribuan Indonesia.
+
+Dokumen acuan berukuran kira-kira 210 × 330 mm, orientasi portrait. Jadikan F4/folio tersebut templat acuan dan sediakan A4 bila diperlukan. Jumlah halaman mengikuti data, tidak dipaksa selalu dua halaman.
+
+Ulangi kepala tabel pada setiap halaman; jangan memotong satu baris transaksi atau memisahkan judul kategori dari rincian pertamanya. Pastikan total, posisi dana, dan blok tanda tangan terbaca tanpa tertimpa footer. Nama penandatangan berasal dari pengurus yang dipilih untuk laporan dan disimpan pada versi final; ruang tanda tangan bukan bukti persetujuan digital otomatis.
+
+## 26.6 Posisi dana, piutang, dan rekonsiliasi
+
+Pisahkan rekening kas/bank, piutang, dan saldo payment gateway secara eksplisit. **Piutang bukan uang kas yang tersedia untuk dibelanjakan.** Piutang Patus harus mempunyai rincian kewajiban/penanggung jawab dan saldo pada tanggal tutup laporan, bukan sekadar angka manual di footer atau seluruh tagihan semua jenis yang belum lunas saat ini.
+
+Referensi Biaung mencantumkan:
+
+| Komponen posisi dana | Nilai contoh |
+|---|---:|
+| LPD Kesiman | Rp216.648.196 |
+| BPD Bali | Rp616.802.657 |
+| Cash | Rp11.209.221 |
+| Jumlah kas dan bank | Rp844.660.074 |
+| Piutang Patus | Rp6.600.000 |
+| Total posisi dana termasuk piutang | Rp851.260.074 |
+
+Karena total dokumen acuan memasukkan piutang, tambahkan penjelasan basis di laporan: **Total posisi dana termasuk piutang; kas dan bank ditampilkan terpisah.** Jangan menyebut Rp851.260.074 sebagai kas tersedia.
+
+Untuk buku kas, berlaku saldo kas akhir = saldo kas awal + penerimaan kas - pengeluaran kas. Untuk total posisi dana, gunakan saldo kas/bank akhir + piutang akhir dan komponen dana lain yang memang termasuk cakupan. Bila menampilkan mutasi posisi dana, jelaskan perubahan piutang/nonkas dalam rekonsiliasi agar saldo pindahan sampai saldo akhir dapat ditelusuri. Jangan membuat transaksi kas fiktif untuk memaksa keseimbangan.
+
+Pembayaran piutang memindahkan nilai dari piutang ke kas/bank; nilainya tidak boleh diakui sebagai pertambahan total dana dua kali. Penerbitan tagihan belum lunas tidak menghasilkan pemasukan kas. Transfer antar-rekening Banjar juga tidak menghasilkan pendapatan atau biaya pada laporan gabungan.
+
+Integrasi QRIS/withdrawal mengikuti ledger yang sudah ditetapkan: tagihan yang dibayar, dana pending/available, biaya, dan pencairan harus dapat ditelusuri tanpa dihitung sebagai pendapatan berulang. Jika saldo gateway masuk cakupan laporan, tampilkan komponennya terpisah dan pastikan tidak tumpang tindih dengan kas/bank; jika belum masuk, nyatakan cakupannya.
+
+Semua komponen posisi dana dan piutang dihitung pada tanggal/batas penutupan yang sama dengan laporan. Posisi tagihan saat ini boleh tersedia sebagai tampilan terpisah, tetapi bukan pengganti posisi historis pada tanggal laporan.
+
+## 26.7 Penyimpanan dan akses laporan
+
+Petengen menyiapkan laporan; Kelian dapat memeriksa sesuai izin yang berlaku. Finalisasi menyimpan versi, periode/batas penutupan, rincian transaksi yang digunakan, subtotal, saldo, posisi dana, dan penandatangan. Unduh ulang versi final tidak boleh berubah akibat pembayaran berikutnya atau perubahan master data. Koreksi menghasilkan versi baru dengan alasan dan jejak audit, mempertahankan versi sebelumnya.
+
+Terapkan isolasi Banjar untuk kategori, rekening, transaksi, piutang, laporan, ekspor, dan lampiran. Otorisasi wajib diperiksa di backend; file laporan/bukti tidak dibuka melalui URL publik tanpa otorisasi.
+
+Perluas schema, service, form, dan laporan yang sudah ada melalui migration bertahap. Pertahankan data historis dan audit. Transaksi lama yang belum berkategori harus tetap masuk total dengan penanda “Belum dikategorikan” untuk dipetakan; jangan menghilangkannya dari laporan. Saldo awal historis harus direkonsiliasi tanpa dihitung ulang sebagai pemasukan baru.
+
+## 26.8 Kriteria penerimaan laporan Biaung
+
+Gunakan data contoh hanya sebagai fixture pengujian terisolasi, bukan seed produksi. Angka berikut telah dicocokkan dengan penjumlahan rincian dalam PDF:
+
+- Pendapatan Rutin: Rp16.259.790.
+- Pendapatan Sewa/Kontrak: Rp225.516.656.
+- Pendapatan Lain-lain: Rp31.836.600.
+- Total pemasukan: **Rp273.613.046**.
+- Total pengeluaran: **Rp77.637.789**.
+- Saldo pindahan pada contoh: **Rp655.284.817**.
+- Rekonsiliasi total acuan: Rp655.284.817 + Rp273.613.046 - Rp77.637.789 = **Rp851.260.074**.
+- Jumlah posisi dana: Rp216.648.196 + Rp616.802.657 + Rp11.209.221 + Rp6.600.000 = **Rp851.260.074**.
+
+Angka acuan ini membuktikan konsistensi aritmetika dokumen; PDF tidak menyediakan rincian piutang/saldo awal per rekening yang cukup untuk menyimpulkan seluruh jurnal. Jangan mengarang rincian tersebut. Pengujian pencatatan operasional menggunakan fixture dengan saldo awal dan mutasi kas/piutang yang lengkap serta konsisten.
+
+Verifikasi kategori nihil, periode lintas bulan, batas sangkep pada tanggal yang sama, transfer internal, pelunasan piutang, transaksi pembalik, data historis tanpa kategori, saldo pada tanggal tutup, finalisasi/koreksi, isolasi Banjar, dan pencegahan pencatatan QRIS/pelunasan ganda. Render PDF dan periksa visual semua halaman, termasuk keterangan panjang, pengulangan kepala tabel, serta posisi dana/tanda tangan pada halaman akhir.
+
 ---
 
 # 27. RULE IURAN
 
-Iuran adalah kewajiban **KK**.
+Iuran/patus adalah kewajiban **KK**. Penetapannya dilakukan **Kesinoman secara kolektif**, bukan per orang dan bukan dengan membuka formulir satu per satu untuk setiap KK.
 
 Contoh:
 
@@ -860,17 +1026,21 @@ Rp50.000
 Target: Semua KK Aktif
 ```
 
-Sistem otomatis membuat tagihan ke seluruh KK aktif.
+Kesinoman menentukan jenis iuran/patus, nama event/periode, nominal per KK, tanggal/jatuh tempo, serta target kolektif: semua KK aktif dalam wilayah aksesnya atau unit yang boleh dikelolanya. Sistem menampilkan jumlah KK unik dan total nominal sebelum penerbitan.
 
-Petengen tidak memilih satu-satu.
+Dengan satu tindakan penerbitan, sistem membuat satu tagihan untuk setiap KK yang memenuhi target. Kesinoman tidak memilih warga atau KK satu-satu untuk alur iuran/patus. Satu KK yang tergabung dalam beberapa unit target tetap hanya menerima satu tagihan dalam event yang sama.
 
 Kepala keluarga menjadi penanggung jawab utama tetapi tagihan tetap melekat kepada KK.
+
+Simpan snapshot daftar KK sasaran saat penetapan agar perubahan keanggotaan/status/unit berikutnya tidak mengubah tagihan terbit secara diam-diam. Jika ada perubahan sasaran sebelum terbit, tampilkan pratinjau terbaru untuk diperiksa kembali.
+
+Kesinoman dengan akses unit tidak boleh menetapkan tagihan di luar unit yang diizinkan beserta turunannya bila hak tersebut aktif. Pilihan “Semua KK Aktif” harus jelas menyebut cakupan akses, bukan otomatis seluruh Banjar untuk setiap pengguna.
 
 ---
 
 # 28. IURAN BERBASIS EVENT
 
-Gunakan:
+Kesinoman membuat dan menerbitkan event iuran/patus secara kolektif. Gunakan:
 
 ```text
 Billing Type
@@ -916,11 +1086,13 @@ Dua event berbeda boleh menagih KK yang sama.
 
 Enforce pada backend dan database.
 
+Penerbitan massal harus idempotent, termasuk saat tombol ditekan ulang, permintaan dicoba ulang, atau dua pengurus memproses event bersamaan. Simpan aktor, waktu, sasaran, nominal, dan hasil penerbitan dalam audit. Jika pemrosesan dilakukan melalui antrean, tampilkan status proses dan ringkasan hasil; jangan menyatakan semua berhasil sebelum selesai.
+
 ---
 
 # 29. DEDOSAN
 
-Dedosan dikenakan kepada individu.
+Dedosan dikenakan kepada individu dan ditetapkan oleh **Kesinoman**. Tersedia dua sumber penetapan: **manual melalui daftar warga/krama** dan **calon dedosan dari presensi**. Penetapan manual tidak wajib mempunyai data kegiatan/presensi, tetapi tetap wajib berada dalam satu event dedosan yang jelas.
 
 Rule:
 
@@ -939,7 +1111,50 @@ Anggota lain KK-001 tidak boleh mendapat dedosan kedua untuk event tersebut.
 
 Tetapi event berbeda boleh.
 
-Enforce backend + database bila memungkinkan.
+Enforce backend dan constraint database; aturan ini berlaku sama untuk input manual, pilihan massal, dan calon dari presensi.
+
+## 29.1 Penetapan dedosan manual secara massal
+
+Alur:
+
+```text
+Kesinoman → Buat/pilih event dedosan
+→ Tentukan nama event, alasan, nominal per individu, tanggal/jatuh tempo
+→ Tampilkan daftar warga/krama dalam wilayah akses
+→ Centang beberapa warga melalui checkbox
+→ Tinjau jumlah warga, KK unik, dan total nominal
+→ Persetujuan Kelian jika diwajibkan
+→ Terbitkan dedosan sekaligus
+```
+
+Daftar harus menyediakan pencarian nama, filter unit/KK/status, identitas KK, status sudah ditetapkan dalam event, checkbox per baris, dan pilihan semua yang jelas cakupannya. Jangan mewajibkan membuka halaman setiap warga untuk menetapkan dedosan.
+
+Pilihan lintas halaman harus dipertahankan dan jumlah pilihan selalu terlihat. Bedakan **Pilih semua di halaman ini** dari **Pilih semua hasil filter**; perubahan filter tidak boleh diam-diam menambah penerima. Sediakan hapus pilihan serta tinjauan daftar terpilih sebelum terbit.
+
+Jika dua warga berasal dari KK yang sama dalam event yang sama, tampilkan konflik dan minta Kesinoman memilih satu penanggung jawab. Jangan otomatis memilih orang pertama, melewatkan konflik tanpa penjelasan, atau menerbitkan dua tagihan. Warga/KK yang sudah dikenai dedosan pada event tersebut harus ditandai dan tidak dapat ditambahkan lagi.
+
+Validasi semua sasaran di backend, termasuk identitas warga dan KK, keanggotaan Banjar, cakupan unit, duplikasi dalam event, nominal, serta kewenangan penerbit. Jangan percaya daftar ID, filter, atau jumlah pilihan dari frontend. Tolak batch yang tidak valid dengan rincian masalah sebelum menerbitkan tagihan; penerbitan harus atomik dan aman terhadap pengulangan/konkurensi.
+
+Pilihan “semua hasil filter” harus mengacu pada snapshot sasaran yang ditinjau, bukan menjalankan ulang filter yang dapat berubah ketika job diproses. Perubahan sasaran atau nominal setelah persetujuan membatalkan persetujuan lama dan memerlukan peninjauan kembali jika approval diwajibkan.
+
+## 29.2 Hak akses penetapan
+
+Pisahkan izin melihat daftar/tagihan yang diperlukan Kesinoman, membuat event, memilih sasaran, dan menerbitkan iuran/dedosan dari izin `cash.manage`, rekonsiliasi, dan pencairan milik Petengen. Sesuaikan role seed, menu, route, policy/service, dan query scope agar alur benar-benar dapat dijalankan Kesinoman, termasuk Kesinoman dengan cakupan unit.
+
+Hak penetapan iuran/patus dan dedosan tidak diberikan kepada Petengen hanya karena memiliki peran Bendahara. Akun dengan beberapa peran mengikuti gabungan izin yang secara eksplisit ditetapkan. Akses Kesinoman ke tagihan dibatasi pada wilayah tugas; jangan membuka seluruh laporan kas/rekening Banjar untuk mendukung penetapan.
+
+## 29.3 Pembayaran iuran/patus dan dedosan
+
+Setiap tagihan iuran/patus maupun dedosan dapat dibayar melalui:
+
+1. **Tunai/cash:** warga membayar kepada Petengen/petugas penerima yang mempunyai izin pencatatan kas. Petugas membuka tagihan, mencatat penerimaan tunai, rekening kas, tanggal, dan bukti; sistem melunasi tagihan serta membuat satu transaksi pemasukan berkategori yang sesuai secara atomik.
+2. **QRIS melalui portal warga:** warga melihat tagihan yang berhak diaksesnya, memilih Bayar QRIS, dan membayar melalui Midtrans. Backend memvalidasi webhook/status provider, melunasi tagihan, dan mencatat ledger sesuai aturan payment. Jangan meminta Petengen mencatat pemasukan manual kedua untuk pembayaran yang sama.
+
+Penetapan tagihan belum berarti penerimaan uang. Pisahkan status tagihan, metode pembayaran, bukti penerimaan, dan status dana tersedia. Kedua metode harus menampilkan status pelunasan yang konsisten kepada Kesinoman, Petengen, dan warga sesuai hak akses masing-masing.
+
+Jika tagihan sudah lunas secara tunai, jangan buat QRIS baru. Jika ada QRIS aktif ketika petugas akan menerima tunai, periksa status provider dan selesaikan/pastikan pembatalannya sebelum mengonfirmasi penerimaan tunai; selama status belum pasti, tampilkan bahwa pembayaran masih diproses. Kunci tagihan dan gunakan idempotency untuk mencegah pelunasan ganda.
+
+Jika dana QRIS ternyata diterima setelah pelunasan tunai karena race atau notifikasi terlambat, catat penerimaan provider sebagai kelebihan pembayaran yang perlu direkonsiliasi; jangan menghilangkan uang yang benar-benar diterima, melunasi tagihan dua kali, atau menghitungnya sebagai pendapatan tagihan kedua. Tampilkan kebutuhan tindak lanjut kepada petugas berizin dengan jejak audit.
 
 ---
 
@@ -967,7 +1182,7 @@ Jangan hardcode credential.
 
 # 31. QRIS PAYMENT FLOW
 
-Krama dapat membayar tagihan menggunakan QRIS.
+Krama dapat membayar tagihan iuran/patus dan dedosan melalui QRIS di portal warga. Metode tunai tetap tersedia sesuai bagian 29.3; QRIS bukan satu-satunya cara pelunasan.
 
 Flow:
 
@@ -1500,6 +1715,8 @@ BELUM_DIVERIFIKASI
 
 Tidak hadir tidak langsung membuat dedosan.
 
+Kesinoman meninjau calon dari presensi dan memilih penanggung jawab melalui checkbox secara massal dengan aturan bagian 29.1. Alur ini melengkapi penetapan manual, bukan menjadi satu-satunya sumber dedosan.
+
 Flow:
 
 ```text
@@ -1511,13 +1728,13 @@ Verifikasi
 ↓
 Calon Dedosan
 ↓
-Pilih Individu Penanggung Jawab
+Kesinoman Memilih Penanggung Jawab melalui Checkbox Massal
 ↓
 Validasi 1 KK / 1 event
 ↓
 Approval jika diperlukan
 ↓
-Terbitkan Dedosan
+Kesinoman Menerbitkan Dedosan secara Massal
 ```
 
 ---
@@ -1726,12 +1943,12 @@ Contoh:
 
 ### Iuran
 
-Jangan pilih KK satu-satu.
+Kesinoman menetapkan iuran/patus secara kolektif. Jangan pilih orang atau KK satu-satu.
 
 Gunakan:
 
 ```text
-Semua KK Aktif
+Semua KK Aktif dalam Cakupan Akses / Unit yang Diizinkan
 ```
 
 ### Surat
@@ -1740,7 +1957,7 @@ Ambil identitas dari master.
 
 ### Dedosan
 
-Ambil kandidat dari presensi.
+Kesinoman dapat mengambil kandidat dari presensi atau memilih manual dari daftar warga/krama melalui checkbox massal. Gunakan data identitas dan KK yang sudah tersedia; jangan meminta input identitas ulang.
 
 ### Aset
 
@@ -1769,6 +1986,52 @@ Lainnya
 Jika user memilih Iuran, baru tampilkan konfigurasi Iuran.
 
 Jika memilih Dedosan, baru tampilkan konfigurasi Dedosan.
+
+## 58.1 Mudah digunakan pengurus lanjut usia
+
+- Gunakan istilah yang dikenal pengurus, misalnya “Catat pemasukan”, “Catat pengeluaran”, “Tetapkan iuran/patus”, dan “Tetapkan dedosan”. Istilah teknis seperti ledger, scope, entity, atau idempotency tidak muncul sebagai petunjuk kerja pengguna.
+- Ukuran teks isi dan input minimal 16 px; tombol/area sentuh utama minimal 44 × 44 px, berjarak cukup, dan memiliki label teks. Jangan hanya memakai ikon, warna, hover, atau tooltip untuk menjelaskan tindakan penting.
+- Tampilkan satu tindakan utama yang jelas untuk setiap tahap, label kolom yang selalu terlihat, tanda wajib/opsional, serta contoh singkat pada kolom yang membutuhkannya. Hindari formulir panjang dengan pilihan yang belum relevan.
+- Sediakan nilai awal yang masuk akal tanpa membuat transaksi otomatis. Format nominal rupiah langsung mengikuti bagian 26.2. Tampilkan ringkasan penerima dan total sebelum menerbitkan tagihan massal.
+- Pesan kesalahan harus berada dekat kolom terkait, menggunakan bahasa sederhana, dan menjelaskan cara memperbaikinya. Pertahankan semua isian yang masih valid. Setelah berhasil, tampilkan tindakan yang berhasil dan langkah berikutnya dengan jelas.
+- Pastikan dapat digunakan dengan keyboard, pembesaran teks/zoom, dan layar HP; fokus terlihat, label terhubung ke input, serta panel/dialog mengelola dan mengembalikan fokus dengan benar. Jangan menutup tombol simpan dengan keyboard virtual atau elemen tetap.
+
+## 58.2 Tambah data pendukung tanpa meninggalkan pekerjaan
+
+Pengguna tidak boleh harus mencari menu lain hanya karena pilihan yang dibutuhkan belum tersedia. Setiap pemilih data yang dapat ditambah harus menyediakan tindakan tambah yang terlihat di dekat kolom sesuai izin pengguna, bukan hanya pada halaman pengaturan.
+
+Utamakan formulir singkat di panel/dialog pada halaman yang sama. Contoh: **+ Tambah kategori** pada transaksi, **+ Tambah kas** pada pilihan rekening kas manual, serta **+ Tambah jenis iuran/patus** pada penetapan tagihan bila pengguna berizin. Pengaturan lanjutan tetap tersedia melalui pintasan yang jelas. Jangan menumpuk beberapa dialog.
+
+Alur wajib untuk kategori yang belum ada:
+
+```text
+Petengen mengisi transaksi
+→ Kategori belum tersedia
+→ Klik + Tambah kategori di dekat kolom
+→ Isi nama → Simpan kategori
+→ Kategori baru otomatis terpilih
+→ Lanjutkan transaksi dengan semua isian sebelumnya tetap utuh
+```
+
+Pola ini berlaku lintas modul untuk data pendukung yang relevan. Data sensitif seperti rekening tujuan pencairan tetap mengikuti proses verifikasi yang diwajibkan; pintasan tidak boleh melewati persetujuan, validasi, atau hak akses backend. Penambahan rekening kas pencatatan berbeda dari pendaftaran rekening bank tujuan pencairan.
+
+Jika pengguna tidak berizin menambah pilihan, jelaskan siapa yang dapat membantu atau sediakan alur permintaan yang memang tersedia. Jangan menampilkan tombol yang pasti gagal, membiarkan dropdown kosong tanpa penjelasan, atau memberikan hak kelola yang tidak diperlukan.
+
+## 58.3 Pintasan dan kembali ke formulir semula
+
+Jika penambahan/pengaturan memang harus dilakukan pada halaman terpisah, **wajib sediakan pintasan langsung dari formulir asal** dengan label tujuan yang jelas. Jangan hanya memberi instruksi “buka Pengaturan” tanpa tautan/tombol.
+
+Sebelum berpindah, simpan draf isian secara aman dalam cakupan pengguna dan Banjar. Setelah selesai, sediakan **Simpan dan kembali ke [nama formulir asal]** atau tombol kembali yang setara; pulihkan draf, perbarui pilihan, dan pilih data yang baru dibuat bila relevan. Saat batal, kembali ke draf yang sama. Jelaskan kepada pengguna bahwa isian sudah disimpan sementara; draf bukan transaksi/tagihan yang telah diterbitkan.
+
+Nominal, tanggal, keterangan, sasaran/checkbox lintas halaman, dan pilihan lain tidak boleh hilang. Jika formulir memiliki lampiran, pertahankan melalui unggahan sementara yang aman dan terotorisasi; jangan mengandalkan pemulihan otomatis file input setelah navigasi. Draf/unggahan sementara harus berumur terbatas, dihapus setelah selesai atau dibatalkan, dan tidak bocor antar-akun/Banjar.
+
+Tujuan kembali harus internal dan divalidasi. Saat pengguna kembali setelah sesi berakhir atau hak akses berubah, validasi ulang izin dan data sebelum penyimpanan. Draf tidak boleh menerbitkan transaksi tanpa tindakan simpan/terbit yang eksplisit.
+
+## 58.4 Kriteria penerimaan UX
+
+Setiap modul harus ditinjau menggunakan skenario pekerjaan pengurus, bukan hanya pemeriksaan bahwa tombol berfungsi. Untuk transaksi: isi nominal/tanggal/keterangan, tambah kategori yang belum tersedia, dan simpan transaksi tanpa membuka menu lain atau mengetik ulang isian. Uji pula batal, nama kategori duplikat, validasi gagal, dan gangguan jaringan saat menambah kategori; transaksi asal harus tetap utuh dan tidak terkirim dua kali.
+
+Untuk alur yang memerlukan halaman lain, uji pintasan, kembali setelah simpan/batal, pemulihan draf termasuk sasaran massal/lampiran bila ada, dan pergantian sesi/akun. Uji pada layar HP, keyboard, dan pembesaran teks. Fitur belum dianggap selesai jika pengguna harus menelusuri menu secara manual untuk menambah pilihan atau kehilangan pekerjaan saat kembali.
 
 ---
 
@@ -1829,6 +2092,10 @@ Withdrawal reference harus unique.
 
 # 61. TEST WAJIB
 
+## Kemudahan penggunaan pengurus
+
+Verifikasi skenario bagian 58.1–58.4: tambah kategori dari formulir transaksi, kategori otomatis terpilih, isian tetap utuh saat simpan/batal/error, serta pintasan dan pemulihan draf jika perlu berpindah halaman. Periksa ukuran teks/tombol, pesan kesalahan yang mudah dipahami, keyboard/zoom, dan tampilan HP. Pengujian wajib mencakup pengguna berizin maupun tanpa izin menambah data pendukung.
+
 ## Multi Tenant
 
 Banjar A tidak bisa mengakses data Banjar B.
@@ -1847,13 +2114,19 @@ Event yang sama tidak membuat tagihan ganda pada KK.
 
 Dua event kematian berbeda boleh membuat dua tagihan.
 
+Kesinoman dapat menetapkan iuran/patus untuk semua KK aktif dalam cakupan akses dalam satu proses. KK dalam beberapa unit target tidak mendapat tagihan ganda. Kesinoman dengan akses unit tidak dapat memperluas sasaran melalui manipulasi request. Petengen tanpa peran/izin penetapan tidak dapat menerbitkan tagihan.
+
 ## Dedosan
 
 Satu event tidak boleh mengenai dua anggota KK yang sama.
 
+Penetapan manual dapat dilakukan tanpa presensi melalui checkbox beberapa warga sekaligus. Uji pilihan lintas halaman/filter, konflik anggota satu KK, sasaran di luar akses, perubahan sasaran setelah approval, pengulangan submit, dan dua penerbitan bersamaan. Kesalahan satu sasaran tidak boleh menghasilkan batch terbit sebagian tanpa diketahui pengguna.
+
 ## Payment
 
 Duplicate Midtrans webhook tidak menghasilkan double payment.
+
+Iuran/patus dan dedosan sama-sama dapat dilunasi tunai atau QRIS melalui portal warga. Uji akses tagihan portal, penerimaan tunai dan transaksi kas atomik, konflik QRIS aktif dengan pembayaran tunai, webhook terlambat setelah lunas, serta rekonsiliasi kelebihan pembayaran tanpa menggandakan pendapatan/tagihan.
 
 ## Ledger
 
@@ -2008,7 +2281,11 @@ Bangun:
 - dedosan;
 - laporan.
 
-Testing business rule wajib.
+Laporan pada fase ini wajib memenuhi bagian **26.1–26.8**, termasuk kategori transaksi, periode sangkep, rincian masuk/keluar, saldo pindahan, subtotal/NIHIL, rekening kas/bank, piutang Patus, rekonsiliasi posisi dana, penandatangan, cetak/PDF, serta versi final dan koreksi. Ringkasan kartu kas/tagihan saja belum memenuhi hasil yang diminta.
+
+Penetapan tagihan mengikuti bagian **27–29**: Kesinoman menetapkan iuran/patus kolektif per KK dan dedosan manual melalui checkbox massal; Petengen mencatat penerimaan tunai. Fase 6 menambahkan pembayaran kedua jenis tagihan melalui QRIS portal warga beserta pencegahan pelunasan ganda antarmetode.
+
+Testing business rule dan pemeriksaan visual PDF wajib. Integrasi ledger QRIS/withdrawal dilengkapi pada fase 6–7 sesuai aturan rekonsiliasi bagian 26.6.
 
 ---
 
@@ -2182,7 +2459,7 @@ Kelian Adat, Petengen, Penyarikan dan Kesinoman adalah fungsi inti.
 Tempekan, Regu, Maksan dan struktur lokal bersifat fleksibel.
 
 ## RULE 06
-Iuran merupakan kewajiban KK.
+Iuran/patus merupakan kewajiban KK dan ditetapkan Kesinoman secara kolektif, bukan per orang.
 
 ## RULE 07
 Satu billing event hanya boleh membuat satu tagihan per KK.
@@ -2191,7 +2468,7 @@ Satu billing event hanya boleh membuat satu tagihan per KK.
 Dua event berbeda boleh menagih KK yang sama.
 
 ## RULE 09
-Dedosan dikenakan kepada individu.
+Dedosan dikenakan kepada individu dan ditetapkan Kesinoman, termasuk manual melalui checkbox massal pada daftar warga/krama.
 
 ## RULE 10
 Satu event dedosan maksimal satu individu per KK.
@@ -2200,7 +2477,7 @@ Satu event dedosan maksimal satu individu per KK.
 Ketidakhadiran tidak langsung menjadi dedosan.
 
 ## RULE 12
-Midtrans digunakan untuk QRIS V1.
+Midtrans digunakan untuk QRIS V1 di portal warga. Iuran/patus dan dedosan juga dapat dibayar tunai melalui petugas penerima berizin.
 
 ## RULE 13
 Status pembayaran berhasil hanya berdasarkan validasi backend.

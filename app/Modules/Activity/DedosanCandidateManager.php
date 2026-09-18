@@ -70,6 +70,59 @@ final class DedosanCandidateManager
         });
     }
 
+    // Keputusan massal (Master Prompt §48): Kesinoman memutuskan beberapa calon sekaligus lewat checkbox,
+    // bukan satu per satu. Satu transaksi; bila satu keputusan tidak valid, seluruh batch ditolak.
+    public function decideBulk(User $actor, int $activityId, array $input): void
+    {
+        $data = Validator::make($input, [
+            'decisions' => ['required', 'array', 'min:1'],
+            'decisions.*.candidate_id' => ['required', 'integer'],
+            'decisions.*.decision' => ['required', Rule::in(['SELECT', 'DISMISS', 'RESET'])],
+            'decisions.*.responsible_krama_id' => ['nullable', 'required_if:decisions.*.decision,SELECT', 'integer'],
+            'decisions.*.note' => ['nullable', 'required_if:decisions.*.decision,DISMISS', 'string', 'min:5', 'max:500'],
+        ], [], ['decisions.*.responsible_krama_id' => 'individu penanggung jawab', 'decisions.*.note' => 'alasan'])->validate();
+
+        $this->write($actor, $activityId, function (object $activity) use ($actor, $data) {
+            $errors = [];
+            $updates = [];
+            foreach ($data['decisions'] as $row) {
+                $candidate = $this->query->table('dedosan_candidates')->where('activity_id', $activity->id)->where('id', $row['candidate_id'])->lockForUpdate()->first();
+                if (! $candidate) {
+                    $errors[] = "Calon #{$row['candidate_id']} tidak ditemukan.";
+
+                    continue;
+                }
+                if ($candidate->status === 'BILLED') {
+                    $errors[] = "Calon KK {$candidate->household_code} sudah masuk event dedosan.";
+
+                    continue;
+                }
+                if ($row['decision'] === 'SELECT') {
+                    $person = (int) $row['responsible_krama_id'];
+                    $valid = $this->query->table('krama')->where('id', $person)->where('household_id', $candidate->household_id)->where('status', 'ACTIVE')->exists()
+                        && $this->query->table('households')->where('id', $candidate->household_id)->where('status', 'ACTIVE')->exists();
+                    if (! $valid) {
+                        $errors[] = "Pilih anggota aktif dari KK {$candidate->household_code}.";
+
+                        continue;
+                    }
+                    $updates[$candidate->id] = ['status' => 'SELECTED', 'responsible_krama_id' => $person, 'note' => $row['note'] ?? null, 'decided_by' => $actor->id, 'decided_at' => now()];
+                } elseif ($row['decision'] === 'DISMISS') {
+                    $updates[$candidate->id] = ['status' => 'DISMISSED', 'responsible_krama_id' => null, 'note' => $row['note'], 'decided_by' => $actor->id, 'decided_at' => now()];
+                } else {
+                    $updates[$candidate->id] = ['status' => 'PENDING', 'responsible_krama_id' => null, 'note' => null, 'decided_by' => null, 'decided_at' => null];
+                }
+            }
+            if ($errors) {
+                throw ValidationException::withMessages(['decisions' => $errors]);
+            }
+            foreach ($updates as $id => $update) {
+                $this->query->table('dedosan_candidates')->where('id', $id)->update($update + ['updated_at' => now()]);
+                $this->audit->record($this->tenant->id(), $actor->id, 'dedosan.candidate_bulk_'.strtolower($update['status']), 'dedosan_candidates', $id, [], ['status' => $update['status']]);
+            }
+        });
+    }
+
     public function createEvent(User $actor, int $activityId, array $input): int
     {
         $data = Validator::make($input, ['billing_type_id' => ['required', 'integer'], 'amount' => ['nullable', 'regex:/^[1-9][0-9]{0,11}$/'], 'due_date' => ['nullable', 'date_format:Y-m-d']], [], ['billing_type_id' => 'jenis dedosan'])->validate();

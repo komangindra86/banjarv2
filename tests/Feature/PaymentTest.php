@@ -53,7 +53,7 @@ class PaymentTest extends TestCase
         $this->fixture = FinanceFixture::create();
         DB::table('banjar_modules')->where('banjar_id', $this->fixture['tenant'])->where('code', 'PAYMENT')->update(['status' => 'ACTIVE']);
         $this->actor = User::findOrFail($this->fixture['users']['PETENGEN']);
-        app(FinanceManager::class)->issue($this->actor, $this->fixture['event']);
+        app(FinanceManager::class)->issue(User::findOrFail($this->fixture['users']['KESINOMAN']), $this->fixture['event']);
         $this->bill = DB::table('bills')->orderBy('id')->value('id');
         Http::preventStrayRequests();
         Http::fake(function ($request) {
@@ -129,7 +129,7 @@ class PaymentTest extends TestCase
 
     private function tenantSession(?User $user = null): self
     {
-        return $this->actingAs($user ?? $this->actor)->withSession(['auth_host' => 'financeqa.banjar.localhost', 'auth_context' => (string) $this->fixture['tenant']]);
+        return $this->actingAs($user ?? $this->actor)->withSession(['auth_host' => 'financeqa.localhost', 'auth_context' => (string) $this->fixture['tenant']]);
     }
 
     private function rejected(callable $action, int $status): void
@@ -213,7 +213,7 @@ class PaymentTest extends TestCase
         $this->postJson($url, $this->payload($wrong))->assertUnprocessable();
         $wrong->order_id = 'unknown-order';
         $this->postJson($url, $this->payload($wrong))->assertNotFound();
-        $this->postJson('http://financeqa.banjar.localhost/webhooks/midtrans', $this->payload($p))->assertNotFound();
+        $this->postJson('http://financeqa.localhost/webhooks/midtrans', $this->payload($p))->assertNotFound();
         $this->postJson($url, $this->payload($p) + ['oversized' => str_repeat('x', 33000)])->assertStatus(413);
         $this->assertDatabaseCount('payment_webhook_receipts', 0);
         $this->assertDatabaseCount('bill_settlements', 0);
@@ -349,7 +349,7 @@ class PaymentTest extends TestCase
         $member = DB::table('banjar_user_memberships')->insertGetId(['banjar_id' => $p->banjar_id, 'user_id' => $krama->id, 'status' => 'ACTIVE']);
         DB::table('tenant_role_assignments')->insert(['banjar_id' => $p->banjar_id, 'membership_id' => $member, 'role_id' => DB::table('roles')->where('code', 'KRAMA')->value('id'), 'scope_type' => 'BANJAR']);
         DB::table('krama')->where('id', $this->fixture['people'][0])->update(['user_id' => $krama->id]);
-        $host = 'http://financeqa.banjar.localhost';
+        $host = 'http://financeqa.localhost';
         $this->tenantSession($krama)->get($host.'/payments')->assertOk()->assertSee('KK-QA-001')->assertDontSee('KK-QA-002');
         $this->tenantSession($krama)->get($host.'/payments/'.$p->id)->assertOk()->assertHeader('Cache-Control', 'max-age=0, no-store, private');
         $other = DB::table('bills')->where('id', '<>', $this->bill)->value('id');
