@@ -1,7 +1,7 @@
 @extends('layouts.app')
-@section('title', 'Pilih warga untuk dedosan')
+@section('title', 'Pilih kepala keluarga untuk dedosan')
 @section('content')
-<div class="page-heading"><div><span class="eyebrow">{{ $event->reference }}</span><h1>Pilih warga untuk dedosan</h1><p class="muted">Centang beberapa warga sekaligus. Pilihan tersimpan walau Anda berpindah halaman atau mengubah pencarian.</p></div></div>
+<div class="page-heading"><div><span class="eyebrow">{{ $event->reference }}</span><h1>Pilih kepala keluarga untuk dedosan</h1><p class="muted">Dedosan hanya dikenakan ke kepala keluarga, satu per KK. Centang beberapa kepala keluarga sekaligus; pilihan tersimpan walau Anda berpindah halaman atau mengubah pencarian.</p></div></div>
 @include('finance.nav')
 <form method="get" class="card form-stack form-width mb-4"><label>Cari nama<input name="q" maxlength="100" value="{{ $filters['q'] ?? '' }}"></label>
 <label>Unit<select name="unit_id"><option value="">Semua unit dalam akses saya</option>@foreach($units as $unit)<option value="{{ $unit->id }}" @selected((string)($filters['unit_id'] ?? '') === (string)$unit->id)>{{ $unit->name }}</option>@endforeach</select></label>
@@ -17,17 +17,19 @@
     </div>
 </div>
 
-<div class="grid gap-3">
-@forelse($people as $person)
+@if($people->isEmpty())
+<div class="card empty-state"><h2>Tidak ada kepala keluarga yang cocok</h2><p class="muted">Ubah kata kunci atau filter unit. KK tanpa kepala keluarga yang ditetapkan tidak muncul di sini.</p></div>
+@else
+<div class="card candidate-list">
+@foreach($people as $person)
 @php($taken = $existingKk->contains($person->household_id))
-<label class="card flex items-center gap-4 {{ $taken ? 'opacity-60' : '' }}">
+<label class="check-option {{ $taken ? 'opacity-60' : '' }}">
     <input type="checkbox" data-candidate-checkbox value="{{ $person->id }}" @checked(in_array($person->id, $selected)) @disabled($taken)>
     <span class="min-w-0"><strong>{{ $person->name }}</strong><span class="muted block">KK {{ $person->household_code }}</span></span>
     @if($taken)<span class="badge ml-auto">Sudah dipilih di event ini</span>@endif
 </label>
-@empty
-<div class="card empty-state"><h2>Tidak ada warga yang cocok</h2><p class="muted">Ubah kata kunci atau filter unit.</p></div>
-@endforelse
+@endforeach
 </div>
+@endif
 <div class="mt-6">{{ $people->links() }}</div>
 @endsection

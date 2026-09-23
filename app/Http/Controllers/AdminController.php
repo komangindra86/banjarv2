@@ -27,6 +27,9 @@ final class AdminController extends Controller
             'withdrawal' => $access->tenant($user, 'withdrawal.approve') && $gate->allows('PAYMENT') && $gate->allows('FINANCE') && $gate->allows('KRAMA')
                 ? DB::table('withdrawals')->where('banjar_id', $tenantId)->where('status', 'APPROVAL_PENDING')->where('requested_by', '<>', $user->id)->count() : 0,
             'billing_issue' => $gate->allows('FINANCE') && $gate->allows('KRAMA') && ($access->tenant($user, 'billing.issue') || $access->tenant($user, 'dedosan.issue')),
+            // Event yang sudah disetujui (atau tak perlu persetujuan) tapi belum diterbitkan jadi tagihan.
+            'ready_to_issue' => $gate->allows('FINANCE') && $gate->allows('KRAMA') && ($access->tenant($user, 'billing.issue') || $access->tenant($user, 'dedosan.issue'))
+                ? DB::table('billing_events')->where('banjar_id', $tenantId)->where(fn ($q) => $q->where('status', 'APPROVED')->orWhere(fn ($q) => $q->where('status', 'DRAFT')->where('requires_approval', false)))->count() : 0,
             'letter' => $gate->allows('ADMINISTRATION') && $gate->allows('KRAMA')
                 ? ($access->tenant($user, 'letter.verify') ? DB::table('letter_requests')->where('banjar_id', $tenantId)->where('status', 'SUBMITTED')->count() : 0)
                     + ($access->tenant($user, 'letter.approve') ? DB::table('letter_requests')->where('banjar_id', $tenantId)->where('status', 'VERIFIED')->count() : 0) : 0,

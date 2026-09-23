@@ -18,7 +18,9 @@ use Illuminate\Validation\ValidationException;
 
 final class FinanceManager
 {
-    public const KINDS = ['IURAN' => 'Iuran', 'DEDOSAN' => 'Dedosan', 'OTHER' => 'Lainnya'];
+    // Tiga hal berbeda: iuran (rutin/opsional sesuai kebijakan Banjar), patus (santunan yang dikenakan
+    // ke semua KK setiap ada kematian warga), dan dedosan (denda ketidakhadiran kegiatan Banjar).
+    public const KINDS = ['IURAN' => 'Iuran', 'PATUS' => 'Patus', 'DEDOSAN' => 'Dedosan', 'OTHER' => 'Lainnya'];
 
     public const STATUSES = ['DRAFT' => 'Draf', 'APPROVED' => 'Disetujui', 'REJECTED' => 'Ditolak', 'ISSUED' => 'Terbit', 'VOID' => 'Dibatalkan', 'UNPAID' => 'Belum lunas', 'PAID' => 'Lunas'];
 
@@ -197,6 +199,9 @@ final class FinanceManager
     {
         $data = Validator::make($input, ['billing_type_id' => ['required', 'integer'], 'title' => ['required', 'string', 'max:150'],
             'reference' => ['required', 'regex:/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,79}$/'],
+            // Tanggal penetapan = tanggal kejadian sebenarnya (tanggal kematian/kegiatan/periode iuran),
+            // ini yang dipakai Banjar sehari-hari — bukan tanggal jatuh tempo yang tidak dikenal di sini.
+            'event_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:2000-01-01', 'before_or_equal:2100-12-31'],
             'amount' => ['nullable', 'regex:/^[1-9][0-9]{0,11}$/'], 'due_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:2000-01-01', 'before_or_equal:2100-12-31'],
             'target' => ['nullable', Rule::in(['ALL_ACTIVE', 'UNIT'])], 'unit_id' => ['nullable', 'integer']])->validate();
 
@@ -226,14 +231,14 @@ final class FinanceManager
             $requiresApproval = $type->kind === 'DEDOSAN' && $this->query->table('banjar_settings')->value('dedosan_requires_approval');
             $id = $this->insert('billing_events', ['billing_type_id' => $type->id, 'kind' => $type->kind,
                 'amount' => $data['amount'] ?? $type->default_amount, 'title' => $data['title'], 'reference' => $data['reference'],
-                'due_date' => $data['due_date'] ?? null, 'target' => $target, 'unit_id' => $unitId, 'created_by' => $actor->id,
+                'event_date' => $data['event_date'], 'due_date' => $data['due_date'] ?? null, 'target' => $target, 'unit_id' => $unitId, 'created_by' => $actor->id,
                 'requires_approval' => $requiresApproval, 'scope_unit_ids' => $scope === null ? null : json_encode($scope)]);
             $this->audit($actor, 'billing.event_created', 'billing_events', $id);
             if ($type->kind !== 'DEDOSAN') {
                 $this->snapshotTargets($this->row('billing_events', $id));
             }
             if ($requiresApproval) {
-                $this->notifications->notifyPermission($this->tenant->id(), 'dedosan.approve', 'dedosan.approval_pending', 'Dedosan menunggu persetujuan', 'Ada event dedosan menunggu persetujuan Kelian.', '/admin/finance');
+                $this->notifications->notifyPermission($this->tenant->id(), 'dedosan.approve', 'dedosan.approval_pending', 'Dedosan menunggu persetujuan', 'Ada event dedosan menunggu persetujuan Kelian.', '/admin/finance/events/'.$id);
             }
 
             return $id;
@@ -242,7 +247,9 @@ final class FinanceManager
 
     private function targetHouseholds(object $event): Builder
     {
-        $households = $this->query->table('households')->where('status', 'ACTIVE');
+        // Setiap tagihan KK ditujukan ke kepala keluarga; KK tanpa kepala keluarga dikecualikan
+        // sampai kepala keluarganya ditetapkan (lihat juga subject()/bulkSubjects() untuk dedosan).
+        $households = $this->query->table('households')->where('status', 'ACTIVE')->whereNotNull('head_krama_id');
         if ($event->target === 'UNIT') {
             $households->whereIn('id', $this->query->table('household_unit_memberships')->where('unit_id', $event->unit_id)->select('household_id'));
         }
@@ -310,6 +317,10 @@ final class FinanceManager
             if ($person->status !== 'ACTIVE' || $household->status !== 'ACTIVE') {
                 $this->fail('Individu dan KK harus aktif.');
             }
+            // Dedosan hanya dikenakan ke kepala keluarga (satu penanggung jawab per KK).
+            if ((int) $household->head_krama_id !== $person->id) {
+                $this->fail('Dedosan hanya dapat dikenakan kepada kepala keluarga.');
+            }
             $scope = $this->access->unitIds($actor, 'dedosan.issue');
             if ($scope !== null && ! $this->query->table('household_unit_memberships')->where('household_id', $household->id)->whereIn('unit_id', $scope)->exists()) {
                 $this->fail('Individu di luar wilayah akses Anda.');
@@ -361,6 +372,11 @@ final class FinanceManager
                 $household = $this->query->table('households')->where('id', $person->household_id)->first();
                 if (! $household || $household->status !== 'ACTIVE') {
                     $errors[] = "KK dari individu {$person->name} tidak aktif.";
+
+                    continue;
+                }
+                if ((int) $household->head_krama_id !== (int) $kramaId) {
+                    $errors[] = "{$person->name} bukan kepala keluarga KK {$household->code}. Dedosan hanya untuk kepala keluarga.";
 
                     continue;
                 }
@@ -424,6 +440,11 @@ final class FinanceManager
             $status = $data['action'] === 'approve' ? 'APPROVED' : 'REJECTED';
             $this->query->table('billing_events')->where('id', $id)->update(['status' => $status, 'reviewed_by' => $actor->id, 'reviewed_at' => now(), 'review_note' => Crypt::encryptString($data['review_note']), 'updated_at' => now()]);
             $this->audit($actor, 'dedosan.reviewed', 'billing_events', $id, ['status' => $status]);
+            // Pembuat (biasanya Kesinoman) perlu tahu kapan harus kembali menerbitkan atau memperbaiki.
+            $this->notifications->notify($this->tenant->id(), $event->created_by, 'dedosan.reviewed',
+                $status === 'APPROVED' ? 'Dedosan disetujui' : 'Dedosan ditolak',
+                $status === 'APPROVED' ? '"'.$event->title.'" disetujui Kelian dan siap diterbitkan.' : '"'.$event->title.'" ditolak Kelian. Lihat catatan pemeriksaan.',
+                '/admin/finance/events/'.$id);
         });
     }
 

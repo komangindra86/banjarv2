@@ -47,6 +47,18 @@ a:focus-visible, button:focus-visible { outline-color: var(--ui-accent); }
 .action-icon { display: inline-flex; width: 46px; height: 46px; align-items: center; justify-content: center; border: 1px solid #f2dfcf; border-radius: 14px; background: #fff5ec; color: var(--ui-accent); }
 .card-bottom { color: var(--ui-accent); border-color: #f0e9e1; font-size: 12px; margin-top: 24px; }
 .card-bottom > span { display: flex; align-items: center; justify-content: center; background: #fff4ea; border-radius: 50%; width: 28px; height: 28px; }
+.candidate-list .check-option:last-child { border-bottom: 0; }
+.table-scroll { overflow-x: auto; border: 1px solid var(--ui-line); border-radius: 18px; background: #fff; box-shadow: 0 3px 12px #30251803; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.data-table th { text-align: left; padding: 13px 20px; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ui-muted); font-weight: 650; border-bottom: 1px solid var(--ui-line); white-space: nowrap; }
+.data-table td { padding: 13px 20px; border-bottom: 1px solid var(--ui-line); white-space: nowrap; }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tbody tr:hover { background: #fffaf5; }
+.data-table td a { color: var(--ui-ink); font-weight: 650; text-decoration: none; }
+.data-table td a:hover { color: var(--ui-accent); }
+@media(max-width: 600px) {
+    .data-table th, .data-table td { padding: 11px 14px; font-size: 13px; }
+}
 .section-label h2 { font-size: 18px; letter-spacing: -.03em; }
 .section-label span { color: var(--ui-muted); }
 .welcome-panel { position: relative; isolation: isolate; overflow: hidden; background: #2c2825; border: 1px solid #3b332c; border-radius: 22px; padding: 40px; color: #fffaf5; }

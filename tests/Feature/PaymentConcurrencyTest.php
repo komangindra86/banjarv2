@@ -83,7 +83,8 @@ class PaymentConcurrencyTest extends TestCase
         app(FinanceManager::class)->issue(User::findOrFail($fixture['users']['KESINOMAN']), $fixture['event']);
         $base = ['tenant' => $fixture['tenant'], 'actor' => $actor->id];
         $bill = DB::table('bills')->orderBy('id')->value('id');
-        $create = $base + ['action' => 'payment-create', 'id' => $bill];
+        // QRIS dibuat warga pemilik tagihan (portal), bukan Petengen.
+        $create = ['action' => 'payment-create', 'id' => $bill, 'actor' => FinanceFixture::payer($fixture['tenant'], $bill)->id] + $base;
         $this->assertSame(['SUCCESS', 'SUCCESS'], $this->race($create, $create));
         $this->assertDatabaseCount('payments', 1);
         $id = DB::table('payments')->value('id');
@@ -106,7 +107,7 @@ class PaymentConcurrencyTest extends TestCase
         $this->assertDatabaseCount('financial_ledger_transactions', 3);
 
         $bill2 = DB::table('bills')->where('status', 'UNPAID')->orderBy('id')->value('id');
-        $create2 = $base + ['action' => 'payment-create', 'id' => $bill2];
+        $create2 = ['action' => 'payment-create', 'id' => $bill2, 'actor' => FinanceFixture::payer($fixture['tenant'], $bill2)->id] + $base;
         $this->assertSame(['SUCCESS', 'SUCCESS'], $this->race($create2, $create2));
         $id2 = DB::table('payments')->where('bill_id', $bill2)->value('id');
         $input = ['cash_account_id' => $fixture['account'], 'transaction_date' => now('Asia/Makassar')->toDateString(), 'reference' => 'RACE-GATEWAY', 'submission_key' => (string) Str::uuid()];

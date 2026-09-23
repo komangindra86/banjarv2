@@ -129,7 +129,10 @@ final class ActivityController extends Controller
     {
         $activity = $this->access->activity($request->user(), $id);
         $candidates = $this->query->table('dedosan_candidates')->where('activity_id', $id)->orderBy('household_code')->get();
-        $members = $this->query->table('krama')->whereIn('household_id', $candidates->pluck('household_id')->all() ?: [0])->where('status', 'ACTIVE')->orderBy('name')->get(['id', 'name', 'household_id'])->groupBy('household_id');
+        // Dedosan hanya dikenakan ke kepala keluarga: penanggung jawab dibatasi ke kepala keluarga aktif.
+        $members = $this->query->table('krama')->whereIn('household_id', $candidates->pluck('household_id')->all() ?: [0])->where('status', 'ACTIVE')
+            ->whereIn('id', $this->query->table('households')->whereIn('id', $candidates->pluck('household_id')->all() ?: [0])->whereNotNull('head_krama_id')->select('head_krama_id'))
+            ->orderBy('name')->get(['id', 'name', 'household_id'])->groupBy('household_id');
         $absentees = $this->query->table('activity_participants')->where('activity_participants.activity_id', $id)->where('activity_participants.status', 'TIDAK_HADIR')->whereNotNull('activity_participants.krama_id')
             ->join('krama as k', 'k.id', '=', 'activity_participants.krama_id')->get(['activity_participants.household_id', 'k.name'])->groupBy('household_id');
         $types = $this->query->table('billing_types')->where('kind', 'DEDOSAN')->where('is_active', true)->orderBy('name')->get();

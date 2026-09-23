@@ -60,6 +60,9 @@ class FinanceReportTest extends TestCase
         $this->bankAccount = $this->finance->account($this->treasurer, ['name' => 'Bank ABC', 'type' => 'BANK']);
         $admin = User::where('email', 'admin-laporan@example.test')->firstOrFail();
         $this->household = app(KramaManager::class)->household($admin, null, ['code' => 'KK-LAPORAN', 'status' => 'ACTIVE']);
+        // Iuran hanya dikenakan ke kepala keluarga.
+        $head = app(KramaManager::class)->person($admin, null, ['household_id' => $this->household, 'name' => 'Kepala KK Laporan', 'status' => 'ACTIVE']);
+        DB::table('households')->where('id', $this->household)->update(['head_krama_id' => $head]);
     }
 
     private function context(): void
@@ -145,13 +148,13 @@ class FinanceReportTest extends TestCase
         $fixture = $this->buildPeriodFixture();
         // One bill still unpaid as of the cutoff: real piutang.
         $type = $this->finance->billingType($this->kesinoman, ['name' => 'Iuran Piutang', 'kind' => 'IURAN', 'default_amount' => '40000']);
-        $event = $this->finance->event($this->kesinoman, ['billing_type_id' => $type, 'title' => 'Iuran Januari', 'reference' => (string) Str::uuid()]);
+        $event = $this->finance->event($this->kesinoman, ['billing_type_id' => $type, 'title' => 'Iuran Januari', 'reference' => (string) Str::uuid(), 'event_date' => '2026-01-20']);
         $this->finance->issue($this->kesinoman, $event);
         DB::table('billing_events')->where('id', $event)->update(['issued_at' => '2026-01-20 00:00:00']);
 
         // A second bill issued before cutoff but SETTLED AFTER the cutoff must still count as piutang as of the cutoff.
         $type2 = $this->finance->billingType($this->kesinoman, ['name' => 'Iuran Piutang Lambat', 'kind' => 'IURAN', 'default_amount' => '15000']);
-        $event2 = $this->finance->event($this->kesinoman, ['billing_type_id' => $type2, 'title' => 'Iuran Piutang Lambat', 'reference' => (string) Str::uuid()]);
+        $event2 = $this->finance->event($this->kesinoman, ['billing_type_id' => $type2, 'title' => 'Iuran Piutang Lambat', 'reference' => (string) Str::uuid(), 'event_date' => '2026-01-10']);
         $this->finance->issue($this->kesinoman, $event2);
         DB::table('billing_events')->where('id', $event2)->update(['issued_at' => '2026-01-10 00:00:00']);
         $bill2 = DB::table('bills')->where('billing_event_id', $event2)->value('id');

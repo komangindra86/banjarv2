@@ -628,11 +628,12 @@ Fokus:
 - kas;
 - pemasukan;
 - pengeluaran;
-- penerimaan dan rekonsiliasi pembayaran iuran/patus;
-- penerimaan dan rekonsiliasi pembayaran dedosan;
-- pembayaran;
+- penerimaan pembayaran tunai iuran, patus, dan dedosan (klik **Lunas** dari daftar tagihan, lihat bagian 29.3);
+- rekonsiliasi pembayaran QRIS yang dibayar warga sendiri dari portal;
 - pencairan dana;
 - laporan.
+
+Petengen **tidak** membuat pembayaran QRIS atas nama warga; QRIS hanya dimulai warga dari portal.
 
 ## Penyarikan / Sekretaris
 
@@ -654,10 +655,12 @@ Fokus:
 - keluarga;
 - status krama;
 - perubahan data;
-- penetapan iuran/patus secara kolektif per KK;
-- penetapan dedosan, termasuk pemilihan massal warga/krama melalui checkbox.
+- penetapan iuran dan patus secara kolektif per KK;
+- penetapan dedosan kepada kepala keluarga, termasuk pemilihan massal melalui checkbox.
 
-Kesinoman adalah operator penetapan dan penerbitan tagihan iuran/patus serta dedosan dalam wilayah aksesnya. Petengen menangani penerimaan uang, pencatatan kas, rekonsiliasi, dan laporan. Hak menetapkan tagihan tidak otomatis memberikan hak mengelola kas atau pencairan. Persetujuan Kelian tetap berlaku bila diwajibkan kebijakan Banjar.
+Kesinoman adalah operator penetapan dan penerbitan tagihan iuran, patus, dan dedosan dalam wilayah aksesnya. Petengen menangani penerimaan uang, pencatatan kas, rekonsiliasi, dan laporan. Hak menetapkan tagihan tidak otomatis memberikan hak mengelola kas atau pencairan. Persetujuan Kelian tetap berlaku bila diwajibkan kebijakan Banjar.
+
+Kesinoman tidak memegang izin `finance.view`, tetapi tetap mendapat menu **Keuangan** yang membuka halaman **Event tagihan** (siap diterbitkan, menunggu persetujuan Kelian, riwayat), daftar Tagihan tanpa tombol Lunas, serta Jenis & tagihan. Buku kas, saldo, dan laporan tetap tertutup. Beranda menampilkan jumlah event yang siap diterbitkan, dan pembuat dedosan menerima notifikasi saat Kelian menyetujui/menolak.
 
 Keempat fungsi inti ini harus tersedia sebagai role standard.
 
@@ -765,6 +768,17 @@ Data minimal disesuaikan kebutuhan nyata.
 Hindari form panjang.
 
 Gunakan grouping/progressive form.
+
+## 23.1 Kepala keluarga dan hubungan keluarga
+
+- Kepala keluarga ditetapkan **hanya di halaman KK** (`households.head_krama_id`), bukan lewat pilihan hubungan di halaman krama. KK baru dapat dibuat sekaligus dengan kepala keluarganya dalam satu formulir.
+- Anggota lain memakai hubungan: Istri/Suami, Anak, Orang Tua, Mertua, Famili Lain. Label "Kepala Keluarga" selalu diturunkan dari `head_krama_id` dan menimpa hubungan yang tersimpan.
+- Kepala keluarga adalah penanggung jawab semua tagihan KK (iuran, patus, dedosan). **KK tanpa kepala keluarga dikecualikan** dari sasaran iuran/patus dan dari calon/pilihan dedosan sampai kepala keluarganya ditetapkan.
+- Bila kepala keluarga dipindah ke KK lain atau statusnya menjadi tidak aktif (Nonaktif/Pindah/Meninggal), sistem **otomatis mengosongkan** kepala keluarga KK asal (tercatat di audit), lalu memberi tahu pengurus bahwa KK tersebut perlu kepala keluarga pengganti. Jangan menolak perubahan dan memaksa pengurus bolak-balik ke halaman KK.
+
+## 23.2 Tampilan daftar
+
+Satu Banjar bisa memiliki ±200 KK dengan 3–5 anggota. Daftar KK dan daftar krama ditampilkan sebagai **tabel ringkas** (kode KK, kepala keluarga, jumlah anggota, status / nama, KK, hubungan, status) dengan pencarian dan filter, bukan kartu besar per baris. Kartu tetap boleh untuk daftar pendek seperti anggota satu KK.
 
 ---
 
@@ -1014,9 +1028,19 @@ Verifikasi kategori nihil, periode lintas bulan, batas sangkep pada tanggal yang
 
 ---
 
-# 27. RULE IURAN
+# 27. RULE IURAN, PATUS, DAN DEDOSAN
 
-Iuran/patus adalah kewajiban **KK**. Penetapannya dilakukan **Kesinoman secara kolektif**, bukan per orang dan bukan dengan membuka formulir satu per satu untuk setiap KK.
+Tiga kewajiban ini **berbeda** dan disimpan sebagai kategori (`kind`) terpisah agar tampil dan terlapor sendiri-sendiri:
+
+| Kategori | Arti | Pemicu | Sasaran |
+|---|---|---|---|
+| **Iuran** (`IURAN`) | Kontribusi rutin/keagamaan. Kebijakan tiap Banjar berbeda: ada yang wajib bulanan, ada yang per kegiatan keagamaan, ada yang tidak memakai iuran sama sekali. | Periode atau kegiatan | Semua KK aktif / KK satu unit |
+| **Patus** (`PATUS`) | Iuran yang ditetapkan nominalnya setiap ada **kematian** warga. Nominal boleh berbeda tiap kejadian. | Kematian warga | Semua KK aktif / KK satu unit |
+| **Dedosan** (`DEDOSAN`) | Denda karena **tidak hadir** dalam kegiatan Banjar. | Presensi kegiatan atau penetapan manual | Kepala keluarga KK yang dikenai (bagian 29) |
+
+Satu Banjar boleh memiliki beberapa jenis dalam satu kategori dengan nominal berbeda (mis. "Dedosan" dan "Dedosan Samua"). Jenis tagihan dibuat sekali per Banjar lalu dipakai berulang; tiap kejadian menjadi event tersendiri.
+
+Iuran dan patus adalah kewajiban **KK**. Penetapannya dilakukan **Kesinoman secara kolektif**, bukan per orang dan bukan dengan membuka formulir satu per satu untuk setiap KK.
 
 Contoh:
 
@@ -1026,11 +1050,29 @@ Rp50.000
 Target: Semua KK Aktif
 ```
 
-Kesinoman menentukan jenis iuran/patus, nama event/periode, nominal per KK, tanggal/jatuh tempo, serta target kolektif: semua KK aktif dalam wilayah aksesnya atau unit yang boleh dikelolanya. Sistem menampilkan jumlah KK unik dan total nominal sebelum penerbitan.
+Kesinoman memilih jenis tagihan, lalu formulir hanya menanyakan yang perlu: nama kejadian, **tanggal penetapan**, target kolektif (semua KK aktif dalam wilayah aksesnya atau unit yang boleh dikelolanya), dan nominal khusus bila berbeda dari nominal standar. Sistem menampilkan jumlah KK unik dan total nominal sebelum penerbitan.
 
-Dengan satu tindakan penerbitan, sistem membuat satu tagihan untuk setiap KK yang memenuhi target. Kesinoman tidak memilih warga atau KK satu-satu untuk alur iuran/patus. Satu KK yang tergabung dalam beberapa unit target tetap hanya menerima satu tagihan dalam event yang sama.
+Dengan satu tindakan penerbitan, sistem membuat satu tagihan untuk setiap KK yang memenuhi target **dan memiliki kepala keluarga** (bagian 23.1). Kesinoman tidak memilih warga atau KK satu-satu untuk alur iuran/patus. Satu KK yang tergabung dalam beberapa unit target tetap hanya menerima satu tagihan dalam event yang sama.
 
-Kepala keluarga menjadi penanggung jawab utama tetapi tagihan tetap melekat kepada KK.
+Kepala keluarga menjadi penanggung jawab tetapi tagihan tetap melekat kepada KK.
+
+## 27.1 Tanggal penetapan, bukan jatuh tempo
+
+Banjar tidak mengenal jatuh tempo formal. Yang penting adalah **tanggal penetapan** (`billing_events.event_date`, wajib): tanggal kejadian sebenarnya, yaitu tanggal kematian untuk patus, tanggal kegiatan untuk dedosan, dan periode berlaku untuk iuran. Tanggal penetapan ditampilkan di daftar event, rincian event, daftar tagihan, dan rincian tagihan. Jatuh tempo tetap tersedia sebagai isian opsional tersembunyi ("Gunakan jatuh tempo") untuk Banjar yang memakainya. Laporan piutang tetap memakai tanggal terbit sistem (`issued_at`).
+
+## 27.2 Isian otomatis
+
+Jangan meminta Kesinoman mengarang judul atau kode:
+
+- judul terisi otomatis: iuran `[Jenis] [Bulan Tahun]`, patus `[Jenis] - [nama almarhum/ah]` atau tanggal, dan tetap dapat diubah;
+- kode referensi dibuat otomatis (`[KIND]-[YYYYMMDD-HHMMSS]`) dan disembunyikan di balik "Gunakan kode referensi khusus";
+- tanggal penetapan terisi hari ini, dedosan dari kegiatan memakai tanggal kegiatan.
+
+Untuk kasus umum, Kesinoman cukup membuka formulir lalu menekan simpan.
+
+## 27.3 Patus dari status Meninggal
+
+Saat status krama disimpan berubah menjadi **Meninggal**, halaman krama langsung menampilkan dialog **"Buat draf tagihan patus?"** kepada pengguna berizin penetapan: jenis patus (dipilih otomatis bila hanya ada satu, dropdown bila lebih dari satu), judul atas nama almarhum/ah, dan tanggal penetapan hari ini yang dapat diubah. Satu klik "Ya" membuat draf event patus ke semua KK. Tombol yang sama tetap tersedia di halaman krama untuk kunjungan berikutnya. Bila belum ada jenis berkategori Patus, beri pintasan ke Jenis & tagihan.
 
 Simpan snapshot daftar KK sasaran saat penetapan agar perubahan keanggotaan/status/unit berikutnya tidak mengubah tagihan terbit secara diam-diam. Jika ada perubahan sasaran sebelum terbit, tampilkan pratinjau terbaru untuk diperiksa kembali.
 
@@ -1054,7 +1096,7 @@ Contoh:
 
 ```text
 Billing Type:
-Iuran Kematian
+Patus Kematian (kategori PATUS)
 ```
 
 Dalam September:
@@ -1092,22 +1134,22 @@ Penerbitan massal harus idempotent, termasuk saat tombol ditekan ulang, perminta
 
 # 29. DEDOSAN
 
-Dedosan dikenakan kepada individu dan ditetapkan oleh **Kesinoman**. Tersedia dua sumber penetapan: **manual melalui daftar warga/krama** dan **calon dedosan dari presensi**. Penetapan manual tidak wajib mempunyai data kegiatan/presensi, tetapi tetap wajib berada dalam satu event dedosan yang jelas.
+Dedosan dikenakan kepada **kepala keluarga** KK yang bersangkutan (satu orang per KK), siapa pun anggota yang tidak hadir, dan ditetapkan oleh **Kesinoman**. Tersedia dua sumber penetapan: **manual melalui daftar kepala keluarga** dan **calon dedosan dari presensi**. Penetapan manual tidak wajib mempunyai data kegiatan/presensi, tetapi tetap wajib berada dalam satu event dedosan yang jelas.
 
 Rule:
 
-> Dalam satu event dedosan, satu KK maksimal satu individu terkena dedosan.
+> Dalam satu event dedosan, satu KK maksimal satu orang terkena dedosan, dan orang itu harus kepala keluarga aktif KK tersebut.
 
 Contoh:
 
 ```text
 Gotong Royong 20 September
 
-KK-001
-Made → Rp100.000
+KK-001 (kepala keluarga: Made)
+Anggota yang absen: Ketut → dedosan dikenakan ke Made, Rp100.000
 ```
 
-Anggota lain KK-001 tidak boleh mendapat dedosan kedua untuk event tersebut.
+Anggota lain KK-001 tidak boleh mendapat dedosan kedua untuk event tersebut. Backend menolak subjek dedosan yang bukan `households.head_krama_id`, baik dari input manual, pilihan massal, maupun keputusan calon presensi.
 
 Tetapi event berbeda boleh.
 
@@ -1118,20 +1160,19 @@ Enforce backend dan constraint database; aturan ini berlaku sama untuk input man
 Alur:
 
 ```text
-Kesinoman → Buat/pilih event dedosan
-→ Tentukan nama event, alasan, nominal per individu, tanggal/jatuh tempo
-→ Tampilkan daftar warga/krama dalam wilayah akses
-→ Centang beberapa warga melalui checkbox
-→ Tinjau jumlah warga, KK unik, dan total nominal
+Kesinoman → Pilih jenis dedosan → Simpan draf (judul, kode, tanggal penetapan terisi otomatis)
+→ Tampilkan daftar KEPALA KELUARGA aktif dalam wilayah akses
+→ Centang beberapa kepala keluarga melalui checkbox
+→ Tinjau jumlah orang, KK, dan total nominal, isi alasan
 → Persetujuan Kelian jika diwajibkan
-→ Terbitkan dedosan sekaligus
+→ Kesinoman menerbitkan dari Keuangan → Event tagihan → "Siap diterbitkan"
 ```
 
-Daftar harus menyediakan pencarian nama, filter unit/KK/status, identitas KK, status sudah ditetapkan dalam event, checkbox per baris, dan pilihan semua yang jelas cakupannya. Jangan mewajibkan membuka halaman setiap warga untuk menetapkan dedosan.
+Daftar hanya berisi kepala keluarga (satu baris per KK); KK tanpa kepala keluarga tidak muncul. Sediakan pencarian nama, filter unit, identitas KK, status sudah ditetapkan dalam event, checkbox per baris dalam satu daftar rapi (checkbox memakai gaya `.check-option`), dan pilihan semua yang jelas cakupannya. Jangan mewajibkan membuka halaman setiap warga untuk menetapkan dedosan. Pencarian "Tambah satu KK" di halaman event juga hanya menampilkan kepala keluarga.
 
 Pilihan lintas halaman harus dipertahankan dan jumlah pilihan selalu terlihat. Bedakan **Pilih semua di halaman ini** dari **Pilih semua hasil filter**; perubahan filter tidak boleh diam-diam menambah penerima. Sediakan hapus pilihan serta tinjauan daftar terpilih sebelum terbit.
 
-Jika dua warga berasal dari KK yang sama dalam event yang sama, tampilkan konflik dan minta Kesinoman memilih satu penanggung jawab. Jangan otomatis memilih orang pertama, melewatkan konflik tanpa penjelasan, atau menerbitkan dua tagihan. Warga/KK yang sudah dikenai dedosan pada event tersebut harus ditandai dan tidak dapat ditambahkan lagi.
+Karena hanya kepala keluarga yang dapat dipilih, konflik dua orang dari KK yang sama tidak terjadi lagi di UI; backend tetap menolak batch yang berisi bukan-kepala-keluarga atau lebih dari satu orang per KK, dengan rincian masalah. KK yang sudah dikenai dedosan pada event tersebut harus ditandai dan tidak dapat ditambahkan lagi.
 
 Validasi semua sasaran di backend, termasuk identitas warga dan KK, keanggotaan Banjar, cakupan unit, duplikasi dalam event, nominal, serta kewenangan penerbit. Jangan percaya daftar ID, filter, atau jumlah pilihan dari frontend. Tolak batch yang tidak valid dengan rincian masalah sebelum menerbitkan tagihan; penerbitan harus atomik dan aman terhadap pengulangan/konkurensi.
 
@@ -1147,12 +1188,12 @@ Hak penetapan iuran/patus dan dedosan tidak diberikan kepada Petengen hanya kare
 
 Setiap tagihan iuran/patus maupun dedosan dapat dibayar melalui:
 
-1. **Tunai/cash:** warga membayar kepada Petengen/petugas penerima yang mempunyai izin pencatatan kas. Petugas membuka tagihan, mencatat penerimaan tunai, rekening kas, tanggal, dan bukti; sistem melunasi tagihan serta membuat satu transaksi pemasukan berkategori yang sesuai secara atomik.
-2. **QRIS melalui portal warga:** warga melihat tagihan yang berhak diaksesnya, memilih Bayar QRIS, dan membayar melalui Midtrans. Backend memvalidasi webhook/status provider, melunasi tagihan, dan mencatat ledger sesuai aturan payment. Jangan meminta Petengen mencatat pemasukan manual kedua untuk pembayaran yang sama.
+1. **Tunai/cash:** warga datang membayar tunai ke Petengen. Petengen membuka **Keuangan → Tagihan** (tabel yang secara bawaan hanya menampilkan tagihan belum lunas, dapat dicari dengan nama kepala keluarga/kode KK dan disaring per jenis), menekan **Lunas** pada baris warga tersebut, lalu mengonfirmasi, dan selesai. Tanggal penerimaan = hari ini dan nomor bukti dibuat server (`TUNAI-[KK]-[id]`); kas penerima dipilih sekali di atas daftar bila ada lebih dari satu kas. Sistem melunasi tagihan dan membuat satu transaksi pemasukan secara atomik; `submission_key` per baris membuat klik ganda tidak tercatat dua kali. Formulir pelunasan lengkap di halaman rincian tagihan tetap tersedia untuk kasus khusus (kategori, tanggal lain, nomor kuitansi).
+2. **QRIS melalui portal warga saja:** warga melihat tagihan yang berhak diaksesnya, memilih Bayar QRIS, dan membayar melalui Midtrans. Pengurus (termasuk Petengen) tidak membuat QRIS atas nama warga dan tidak melihat tombol QRIS di halaman tagihan pengurus; izin `payment.create` tidak diberikan ke peran pengurus. Backend memvalidasi webhook/status provider, melunasi tagihan, dan mencatat ledger sesuai aturan payment. Jangan meminta Petengen mencatat pemasukan manual kedua untuk pembayaran yang sama.
 
 Penetapan tagihan belum berarti penerimaan uang. Pisahkan status tagihan, metode pembayaran, bukti penerimaan, dan status dana tersedia. Kedua metode harus menampilkan status pelunasan yang konsisten kepada Kesinoman, Petengen, dan warga sesuai hak akses masing-masing.
 
-Jika tagihan sudah lunas secara tunai, jangan buat QRIS baru. Jika ada QRIS aktif ketika petugas akan menerima tunai, periksa status provider dan selesaikan/pastikan pembatalannya sebelum mengonfirmasi penerimaan tunai; selama status belum pasti, tampilkan bahwa pembayaran masih diproses. Kunci tagihan dan gunakan idempotency untuk mencegah pelunasan ganda.
+Jika tagihan sudah lunas secara tunai, jangan buat QRIS baru. Jika ada QRIS warga yang masih diproses ketika Petengen akan menerima tunai, baris tagihan ditandai **"QRIS diproses"** dan konfirmasi Lunas menyebutkannya; ini peringatan, bukan blokir, agar Petengen tidak terkunci saat warga memang membayar tunai. Kunci tagihan dan gunakan idempotency untuk mencegah pelunasan ganda.
 
 Jika dana QRIS ternyata diterima setelah pelunasan tunai karena race atau notifikasi terlambat, catat penerimaan provider sebagai kelebihan pembayaran yang perlu direkonsiliasi; jangan menghilangkan uang yang benar-benar diterima, melunasi tagihan dua kali, atau menghitungnya sebagai pendapatan tagihan kedua. Tampilkan kebutuhan tindak lanjut kepada petugas berizin dengan jejak audit.
 
@@ -1182,7 +1223,7 @@ Jangan hardcode credential.
 
 # 31. QRIS PAYMENT FLOW
 
-Krama dapat membayar tagihan iuran/patus dan dedosan melalui QRIS di portal warga. Metode tunai tetap tersedia sesuai bagian 29.3; QRIS bukan satu-satunya cara pelunasan.
+Krama dapat membayar tagihan iuran, patus, dan dedosan melalui QRIS di portal warga. QRIS hanya dimulai oleh warga sendiri (`payment.self`); pengurus tidak membuat QRIS atas nama warga. Metode tunai tetap tersedia sesuai bagian 29.3; QRIS bukan satu-satunya cara pelunasan.
 
 Flow:
 
@@ -1314,7 +1355,7 @@ Contoh credit:
 ```text
 + Rp50.000
 Payment QRIS
-Iuran Kematian
+Patus Kematian
 Payment #123
 ```
 
@@ -1715,7 +1756,12 @@ BELUM_DIVERIFIKASI
 
 Tidak hadir tidak langsung membuat dedosan.
 
-Kesinoman meninjau calon dari presensi dan memilih penanggung jawab melalui checkbox secara massal dengan aturan bagian 29.1. Alur ini melengkapi penetapan manual, bukan menjadi satu-satunya sumber dedosan.
+Kesinoman meninjau calon dari presensi dengan aturan bagian 29. Alur ini melengkapi penetapan manual, bukan menjadi satu-satunya sumber dedosan.
+
+- Saat presensi diverifikasi, satu calon dibuat per KK yang ada anggotanya tidak hadir, dengan penanggung jawab yang disarankan = **kepala keluarga** (basis presensi KK maupun perorangan). Nama anggota yang benar-benar absen tetap ditampilkan sebagai informasi.
+- KK tanpa kepala keluarga **tidak** dibuatkan calon.
+- Pilihan penanggung jawab hanya berisi kepala keluarga; tombol **"Pilih semua yang disarankan (N KK)"** menandai semua calon yang belum diputuskan dalam satu klik, lalu Kesinoman meninjau dan mengirim sekali.
+- Event dedosan yang dibuat memakai **tanggal kegiatan** sebagai tanggal penetapan; formulir tidak meminta jatuh tempo.
 
 Flow:
 
@@ -1957,7 +2003,15 @@ Ambil identitas dari master.
 
 ### Dedosan
 
-Kesinoman dapat mengambil kandidat dari presensi atau memilih manual dari daftar warga/krama melalui checkbox massal. Gunakan data identitas dan KK yang sudah tersedia; jangan meminta input identitas ulang.
+Kesinoman dapat mengambil kandidat dari presensi atau memilih manual dari daftar kepala keluarga melalui checkbox massal. Gunakan data identitas dan KK yang sudah tersedia; jangan meminta input identitas ulang.
+
+### Patus
+
+Ambil nama almarhum/ah dan tanggal dari perubahan status krama menjadi Meninggal (bagian 27.3); jangan meminta Kesinoman mengetik ulang nama atau membuat jenis tagihan baru untuk setiap kematian.
+
+### Pelunasan tunai
+
+Ambil nominal, KK, dan tanggal dari tagihan; Petengen cukup menekan Lunas (bagian 29.3).
 
 ### Aset
 
@@ -1979,11 +2033,12 @@ Contoh:
 Buat Tagihan
 
 Iuran
+Patus
 Dedosan
 Lainnya
 ```
 
-Jika user memilih Iuran, baru tampilkan konfigurasi Iuran.
+Jika user memilih Iuran, baru tampilkan konfigurasi Iuran. Judul halaman mengikuti kategori ("Tetapkan iuran", "Tetapkan patus", "Tetapkan dedosan").
 
 Jika memilih Dedosan, baru tampilkan konfigurasi Dedosan.
 
@@ -2112,21 +2167,25 @@ Module inactive tidak dapat diakses.
 
 Event yang sama tidak membuat tagihan ganda pada KK.
 
-Dua event kematian berbeda boleh membuat dua tagihan.
+Dua event patus (dua kematian) berbeda boleh membuat dua tagihan.
 
-Kesinoman dapat menetapkan iuran/patus untuk semua KK aktif dalam cakupan akses dalam satu proses. KK dalam beberapa unit target tidak mendapat tagihan ganda. Kesinoman dengan akses unit tidak dapat memperluas sasaran melalui manipulasi request. Petengen tanpa peran/izin penetapan tidak dapat menerbitkan tagihan.
+Kesinoman dapat menetapkan iuran/patus untuk semua KK aktif dalam cakupan akses dalam satu proses. KK dalam beberapa unit target tidak mendapat tagihan ganda. KK tanpa kepala keluarga tidak ikut tertagih. Kesinoman dengan akses unit tidak dapat memperluas sasaran melalui manipulasi request. Petengen tanpa peran/izin penetapan tidak dapat menerbitkan tagihan. Tanggal penetapan wajib dan tersimpan pada event.
+
+## KK
+
+Kepala keluarga yang pindah KK atau menjadi tidak aktif/meninggal otomatis dilepas dari KK asal tanpa menolak perubahan.
 
 ## Dedosan
 
-Satu event tidak boleh mengenai dua anggota KK yang sama.
+Satu event tidak boleh mengenai dua anggota KK yang sama, dan subjek selain kepala keluarga ditolak (manual, massal, dan keputusan calon presensi).
 
-Penetapan manual dapat dilakukan tanpa presensi melalui checkbox beberapa warga sekaligus. Uji pilihan lintas halaman/filter, konflik anggota satu KK, sasaran di luar akses, perubahan sasaran setelah approval, pengulangan submit, dan dua penerbitan bersamaan. Kesalahan satu sasaran tidak boleh menghasilkan batch terbit sebagian tanpa diketahui pengguna.
+Penetapan manual dapat dilakukan tanpa presensi melalui checkbox beberapa kepala keluarga sekaligus. Uji pilihan lintas halaman/filter, sasaran bukan kepala keluarga, sasaran di luar akses, perubahan sasaran setelah approval, pengulangan submit, dan dua penerbitan bersamaan. Kesalahan satu sasaran tidak boleh menghasilkan batch terbit sebagian tanpa diketahui pengguna. Kesinoman tanpa `finance.view` dapat menemukan event yang sudah disetujui dan menerbitkannya.
 
 ## Payment
 
 Duplicate Midtrans webhook tidak menghasilkan double payment.
 
-Iuran/patus dan dedosan sama-sama dapat dilunasi tunai atau QRIS melalui portal warga. Uji akses tagihan portal, penerimaan tunai dan transaksi kas atomik, konflik QRIS aktif dengan pembayaran tunai, webhook terlambat setelah lunas, serta rekonsiliasi kelebihan pembayaran tanpa menggandakan pendapatan/tagihan.
+Iuran, patus, dan dedosan sama-sama dapat dilunasi tunai atau QRIS melalui portal warga. Uji akses tagihan portal, pelunasan tunai satu klik dari daftar (idempotent terhadap klik ganda, ditolak untuk pengguna tanpa `cash.manage`), transaksi kas atomik, penolakan pembuatan QRIS oleh pengurus, konflik QRIS aktif dengan pembayaran tunai, webhook terlambat setelah lunas, serta rekonsiliasi kelebihan pembayaran tanpa menggandakan pendapatan/tagihan.
 
 ## Ledger
 
@@ -2459,7 +2518,7 @@ Kelian Adat, Petengen, Penyarikan dan Kesinoman adalah fungsi inti.
 Tempekan, Regu, Maksan dan struktur lokal bersifat fleksibel.
 
 ## RULE 06
-Iuran/patus merupakan kewajiban KK dan ditetapkan Kesinoman secara kolektif, bukan per orang.
+Iuran, patus, dan dedosan adalah tiga kategori berbeda. Iuran dan patus merupakan kewajiban KK dan ditetapkan Kesinoman secara kolektif, bukan per orang; patus dipicu kematian warga.
 
 ## RULE 07
 Satu billing event hanya boleh membuat satu tagihan per KK.
@@ -2468,16 +2527,16 @@ Satu billing event hanya boleh membuat satu tagihan per KK.
 Dua event berbeda boleh menagih KK yang sama.
 
 ## RULE 09
-Dedosan dikenakan kepada individu dan ditetapkan Kesinoman, termasuk manual melalui checkbox massal pada daftar warga/krama.
+Dedosan dikenakan kepada kepala keluarga KK yang bersangkutan dan ditetapkan Kesinoman, termasuk manual melalui checkbox massal pada daftar kepala keluarga.
 
 ## RULE 10
-Satu event dedosan maksimal satu individu per KK.
+Satu event dedosan maksimal satu orang per KK, yaitu kepala keluarganya. KK tanpa kepala keluarga tidak dikenai iuran, patus, maupun dedosan sampai kepala keluarganya ditetapkan.
 
 ## RULE 11
 Ketidakhadiran tidak langsung menjadi dedosan.
 
 ## RULE 12
-Midtrans digunakan untuk QRIS V1 di portal warga. Iuran/patus dan dedosan juga dapat dibayar tunai melalui petugas penerima berizin.
+Midtrans digunakan untuk QRIS V1 yang hanya dimulai warga dari portal. Iuran, patus, dan dedosan juga dapat dibayar tunai; Petengen cukup menekan Lunas dari daftar tagihan.
 
 ## RULE 13
 Status pembayaran berhasil hanya berdasarkan validasi backend.

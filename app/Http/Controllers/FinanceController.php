@@ -41,10 +41,24 @@ final class FinanceController extends Controller
             'categories' => $this->query->table('cash_transaction_categories')->orderBy('kind')->orderBy('sort_order')->orderBy('name')->get()]);
     }
 
+    // Pintu masuk Kesinoman (billing.issue/dedosan.issue tanpa finance.view): daftar event beserta yang
+    // perlu ditindaklanjuti, tanpa membuka buku kas/saldo yang tetap khusus finance.view.
+    public function events(Request $request)
+    {
+        $this->access->authorizeAny($request->user(), ['finance.view', 'billing.issue', 'dedosan.issue']);
+        $ready = $this->query->table('billing_events')
+            ->where(fn ($q) => $q->where('status', 'APPROVED')->orWhere(fn ($q) => $q->where('status', 'DRAFT')->where('requires_approval', false)))
+            ->orderByDesc('event_date')->orderByDesc('id')->get();
+        $waiting = $this->query->table('billing_events')->where('status', 'DRAFT')->where('requires_approval', true)->orderByDesc('event_date')->orderByDesc('id')->get();
+        $history = $this->query->table('billing_events')->whereIn('status', ['ISSUED', 'REJECTED', 'VOID'])->orderByDesc('event_date')->orderByDesc('id')->paginate(20);
+
+        return view('finance.events', compact('ready', 'waiting', 'history'));
+    }
+
     public function createEvent(Request $request)
     {
         $this->access->authorize($request->user(), 'billing.issue');
-        $request->validate(['type' => ['required', 'integer']]);
+        $request->validate(['type' => ['required', 'integer'], 'subject' => ['nullable', 'integer']]);
         $type = $this->query->table('billing_types')->where('id', $request->integer('type'))->where('is_active', true)->first();
         abort_unless($type, 404);
         $units = $this->query->table('organizational_units')->where('is_active', true)->orderBy('name')->get();
@@ -52,8 +66,24 @@ final class FinanceController extends Controller
         if ($scope !== null) {
             $units = $units->whereIn('id', $scope)->values();
         }
+        // Supaya Kesinoman tidak perlu mengarang judul/kode setiap kali: judul & referensi terisi otomatis,
+        // tetap bisa diubah lewat "Gunakan kode referensi khusus" bila memang perlu.
+        $now = now('Asia/Makassar');
+        // Patus dipicu oleh peristiwa kematian, bukan periode bulanan seperti iuran — datang dari tautan
+        // "Tetapkan patus" di halaman krama (subject = krama yang meninggal), judul menyebut nama almarhum/ah.
+        $subjectName = $type->kind === 'PATUS' && $request->filled('subject')
+            ? $this->query->table('krama')->where('id', $request->integer('subject'))->value('name') : null;
+        $suggestedTitle = match (true) {
+            $subjectName !== null => $type->name.' - '.$subjectName,
+            $type->kind === 'PATUS' => $type->name.' - '.$now->translatedFormat('d F Y'),
+            default => $type->name.' '.$now->translatedFormat('F Y'),
+        };
+        $suggestedReference = strtoupper($type->kind).'-'.$now->format('Ymd-His');
+        // Tanggal penetapan default hari ini (bisa diubah, mis. tanggal kematian sebenarnya bila beda
+        // dari tanggal pencatatan) — ini info yang dipakai Banjar, bukan tanggal jatuh tempo.
+        $suggestedEventDate = $now->toDateString();
 
-        return view('finance.create-event', ['type' => $type, 'units' => $units, 'scoped' => $scope !== null]);
+        return view('finance.create-event', ['type' => $type, 'units' => $units, 'scoped' => $scope !== null, 'suggestedTitle' => $suggestedTitle, 'suggestedReference' => $suggestedReference, 'suggestedEventDate' => $suggestedEventDate]);
     }
 
     public function event(Request $request, int $id)
@@ -67,8 +97,9 @@ final class FinanceController extends Controller
         $search = $request->validate(['q' => ['nullable', 'string', 'max:100']])['q'] ?? '';
         $candidates = collect();
         if ($event->kind === 'DEDOSAN' && $event->status === 'DRAFT' && $search !== '') {
+            // Dedosan hanya dikenakan ke kepala keluarga: pencarian individu dibatasi ke kepala keluarga aktif.
             $candidates = $this->query->table('krama')->where('status', 'ACTIVE')
-                ->whereIn('household_id', $this->query->table('households')->where('status', 'ACTIVE')->select('id'))
+                ->whereIn('id', $this->query->table('households')->where('status', 'ACTIVE')->whereNotNull('head_krama_id')->select('head_krama_id'))
                 ->whereNotIn('household_id', $subjects->pluck('kk_id'))
                 ->where('name', 'like', '%'.addcslashes($search, '%_\\').'%')->select('id', 'name', 'household_id')->orderBy('name')->limit(25)->get();
             $households = $households->union($this->query->table('households')->whereIn('id', $candidates->pluck('household_id'))->select('id', 'code')->get()->keyBy('id'));
@@ -91,8 +122,9 @@ final class FinanceController extends Controller
     {
         $scope = $this->access->unitIds($request->user(), 'dedosan.issue');
         $existingKk = $this->query->table('billing_event_subjects')->where('billing_event_id', $eventId)->pluck('kk_id');
+        // Dedosan hanya dikenakan ke kepala keluarga: checklist hanya menampilkan kepala keluarga aktif.
         $rows = $this->query->table('krama')->where('krama.status', 'ACTIVE')
-            ->join('households as h', 'h.id', '=', 'krama.household_id')->where('h.status', 'ACTIVE');
+            ->join('households as h', 'h.id', '=', 'krama.household_id')->where('h.status', 'ACTIVE')->whereColumn('h.head_krama_id', 'krama.id');
         if ($scope !== null) {
             $rows->whereIn('krama.household_id', $this->query->table('household_unit_memberships')->whereIn('unit_id', $scope)->select('household_id'));
         }
@@ -240,18 +272,46 @@ final class FinanceController extends Controller
     public function bills(Request $request)
     {
         $this->access->authorizeAny($request->user(), ['finance.view', 'billing.issue', 'dedosan.issue']);
-        $filters = $request->validate(['status' => ['nullable', Rule::in(['UNPAID', 'PAID', 'VOID'])], 'q' => ['nullable', 'string', 'max:80']]);
-        $rows = $this->query->table('bills');
-        if (! empty($filters['status'])) {
-            $rows->where('status', $filters['status']);
+        $filters = $request->validate(['status' => ['nullable', Rule::in(['UNPAID', 'PAID', 'VOID', 'ALL'])], 'kind' => ['nullable', Rule::in(array_keys(FinanceManager::KINDS))],
+            'q' => ['nullable', 'string', 'max:80'], 'kas' => ['nullable', 'integer']]);
+        // Tampilan kerja Petengen: default hanya yang belum lunas, karena itu yang dicari saat warga datang membayar.
+        $filters['status'] ??= 'UNPAID';
+        $rows = $this->query->table('bills')
+            ->leftJoin('households as h', 'h.id', '=', 'bills.kk_id')
+            ->leftJoin('krama as head', 'head.id', '=', 'h.head_krama_id')
+            ->select('bills.*', 'head.name as head_name');
+        if ($filters['status'] !== 'ALL') {
+            $rows->where('bills.status', $filters['status']);
+        }
+        if (! empty($filters['kind'])) {
+            $rows->where('bills.kind', $filters['kind']);
         }
         if (! empty($filters['q'])) {
-            $rows->where('household_code', 'like', '%'.addcslashes($filters['q'], '%_\\').'%');
+            $term = '%'.addcslashes($filters['q'], '%_\\').'%';
+            $rows->where(fn ($q) => $q->where('bills.household_code', 'like', $term)->orWhere('head.name', 'like', $term));
         }
-        $bills = $rows->orderByDesc('id')->paginate(20)->withQueryString();
+        $bills = $rows->orderBy('bills.household_code')->orderByDesc('bills.id')->paginate(30)->withQueryString();
         $events = $this->query->table('billing_events')->whereIn('id', $bills->pluck('billing_event_id'))->get()->keyBy('id');
+        $accounts = $this->query->table('cash_accounts')->orderByRaw("type = 'CASH' DESC")->orderBy('name')->get();
+        $account = $accounts->firstWhere('id', (int) ($filters['kas'] ?? 0)) ?? $accounts->first();
+        // Informasional: QRIS yang masih diproses untuk tagihan ini (lihat catatan di FinanceManager::settle()).
+        $pendingQris = DB::table('payments')->where('banjar_id', app(CurrentBanjar::class)->id())->whereIn('bill_id', $bills->pluck('id'))
+            ->whereIn('status', ['CREATING', 'UNKNOWN', 'PENDING'])->pluck('bill_id')->all();
 
-        return view('finance.bills', compact('bills', 'events', 'filters'));
+        return view('finance.bills', compact('bills', 'events', 'filters', 'accounts', 'account', 'pendingQris'));
+    }
+
+    // Warga datang membayar tunai: satu klik "Lunas" dari daftar tagihan. Tanggal (hari ini) dan nomor
+    // bukti dibuat server; submission_key dari form membuat klik ganda tidak mencatat dua kali.
+    public function payCash(Request $request, int $id)
+    {
+        $data = $request->validate(['cash_account_id' => ['required', 'integer'], 'submission_key' => ['required', 'uuid']]);
+        $bill = $this->query->table('bills')->where('id', $id)->first();
+        abort_unless($bill, 404);
+        $this->manager->settle($request->user(), $id, $data + ['transaction_date' => now('Asia/Makassar')->toDateString(), 'reference' => 'TUNAI-'.$bill->household_code.'-'.$id]);
+        $head = $this->query->table('households')->join('krama', 'krama.id', '=', 'households.head_krama_id')->where('households.id', $bill->kk_id)->value('krama.name');
+
+        return back()->with('success', $bill->household_code.($head ? ' · '.$head : '').' lunas '.FinanceManager::money($bill->gross_amount).' — tercatat sebagai pemasukan kas.');
     }
 
     public function bill(Request $request, int $id)

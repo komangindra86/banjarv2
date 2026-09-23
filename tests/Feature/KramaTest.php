@@ -96,6 +96,78 @@ class KramaTest extends TestCase
         return app(KramaManager::class)->person($this->admin, null, $extra + ['name' => 'Made Uji', 'status' => 'ACTIVE', 'household_id' => $household]);
     }
 
+    public function test_household_create_accepts_optional_head_name_in_one_step(): void
+    {
+        $unit = $this->unit('Tempekan Kangin');
+        $this->login();
+        $this->post($this->host.'/admin/krama/households', ['code' => 'KK-COMBO', 'status' => 'ACTIVE', 'unit_ids' => [$unit], 'head_name' => 'I Made Suarta'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $household = DB::table('households')->where('code', 'KK-COMBO')->first();
+        $this->assertNotNull($household->head_krama_id);
+        $this->assertDatabaseHas('krama', ['id' => $household->head_krama_id, 'household_id' => $household->id, 'name' => 'I Made Suarta', 'status' => 'ACTIVE']);
+        // Leaving head_name blank keeps the existing "household only" behavior.
+        $this->post($this->host.'/admin/krama/households', ['code' => 'KK-EMPTY', 'status' => 'ACTIVE', 'unit_ids' => [$unit]])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('households', ['code' => 'KK-EMPTY', 'head_krama_id' => null]);
+        // head_name is ignored on update — it must not resurrect/rename a member via the household form.
+        $this->patch($this->host.'/admin/krama/households/'.$household->id, ['version' => $household->version, 'code' => 'KK-COMBO', 'status' => 'ACTIVE', 'unit_ids' => [$unit], 'head_name' => 'Should Be Ignored'])
+            ->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('krama', 1);
+    }
+
+    public function test_person_create_locks_household_from_query_context_and_redirects_there(): void
+    {
+        $unit = $this->unit('Tempekan Kangin');
+        $hh = $this->household('KK-201', [$unit]);
+        $other = $this->household('KK-202', [$unit]);
+        $this->login();
+        $this->get($this->host.'/admin/krama/people/create?household='.$hh)->assertOk()->assertSee('KK-201', false)->assertDontSee('KK-202', false);
+        $response = $this->post($this->host.'/admin/krama/people', ['name' => 'Anggota Baru', 'status' => 'ACTIVE', 'household_id' => $hh]);
+        $response->assertRedirect($this->host.'/admin/krama/households/'.$hh)->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('krama', ['household_id' => $hh, 'name' => 'Anggota Baru']);
+        // Without household context the free picker (listing every in-scope KK) is still available.
+        $this->get($this->host.'/admin/krama/people/create')->assertOk()->assertSee('KK-201', false)->assertSee('KK-202', false);
+    }
+
+    public function test_relationship_is_set_per_member_and_head_always_overrides_display(): void
+    {
+        $unit = $this->unit('Tempekan Kangin');
+        $hh = $this->household('KK-301', [$unit]);
+        $wife = $this->person($hh, ['name' => 'Ni Wayan Istri', 'relationship' => 'ISTRI_SUAMI']);
+        $this->assertDatabaseHas('krama', ['id' => $wife, 'relationship' => 'ISTRI_SUAMI']);
+        $this->login();
+        $this->get($this->host.'/admin/krama/households/'.$hh)->assertOk()->assertSee('Istri/Suami', false);
+        // Make her head of household: display must show "Kepala Keluarga" even though relationship is still stored underneath.
+        $household = DB::table('households')->find($hh);
+        $this->patch($this->host.'/admin/krama/households/'.$hh, ['version' => $household->version, 'code' => 'KK-301', 'status' => 'ACTIVE', 'head_krama_id' => $wife, 'unit_ids' => [$unit]])->assertSessionHasNoErrors();
+        $response = $this->get($this->host.'/admin/krama/households/'.$hh)->assertOk();
+        $response->assertSee('Kepala Keluarga', false)->assertDontSee('Istri/Suami', false);
+        $this->get($this->host.'/admin/krama/people/'.$wife)->assertOk()->assertSee('Kepala Keluarga', false);
+        // The relationship select is not offered for the current head — editing other fields must not require/clear it.
+        $this->patch($this->host.'/admin/krama/people/'.$wife, ['version' => 1, 'name' => 'Ni Wayan Istri', 'status' => 'ACTIVE', 'household_id' => $hh, 'phone' => '081234567890'])
+            ->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('krama', ['id' => $wife, 'relationship' => 'ISTRI_SUAMI']);
+    }
+
+    public function test_relationship_change_request_supports_setting_and_clearing_without_error(): void
+    {
+        $hh = $this->household();
+        $person = $this->person($hh, ['relationship' => 'ANAK']);
+        $verifier = $this->role('KESINOMAN');
+        $this->login();
+        $this->post($this->host.'/admin/krama/people/'.$person.'/change', ['field' => 'relationship', 'value' => 'ORANG_TUA', 'reason' => 'Koreksi data', 'version' => 1])->assertSessionHasNoErrors();
+        $id = DB::table('krama_change_requests')->value('id');
+        $this->login($verifier);
+        $this->post($this->host.'/admin/krama/changes/'.$id.'/review', ['action' => 'verify'])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('krama', ['id' => $person, 'relationship' => 'ORANG_TUA']);
+        // Clearing it back to blank must not crash on the ENUM column (empty string vs null).
+        $this->login();
+        $this->post($this->host.'/admin/krama/people/'.$person.'/change', ['field' => 'relationship', 'value' => '', 'reason' => 'Hapus data', 'version' => 2])->assertSessionHasNoErrors();
+        $id2 = DB::table('krama_change_requests')->orderByDesc('id')->value('id');
+        $this->login($verifier);
+        $this->post($this->host.'/admin/krama/changes/'.$id2.'/review', ['action' => 'verify'])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('krama', ['id' => $person, 'relationship' => null]);
+    }
+
     public function test_household_member_head_search_and_private_views(): void
     {
         $unit = $this->unit('Tempekan Kangin');
@@ -117,7 +189,7 @@ class KramaTest extends TestCase
         $this->get($this->host.'/')->assertDontSee('Made Uji');
     }
 
-    public function test_head_must_belong_to_household_and_cannot_move_or_become_inactive(): void
+    public function test_head_must_belong_to_household_when_set_via_household_form(): void
     {
         $a = $this->household();
         $b = $this->household('KK-002');
@@ -125,11 +197,37 @@ class KramaTest extends TestCase
         $this->login();
         $this->patch($this->host.'/admin/krama/households/'.$b, ['version' => 1, 'code' => 'KK-002', 'status' => 'ACTIVE', 'head_krama_id' => $person])->assertSessionHasErrors('head_krama_id');
         $this->patch($this->host.'/admin/krama/households/'.$a, ['version' => 1, 'code' => 'KK-001', 'status' => 'ACTIVE', 'head_krama_id' => $person])->assertSessionHasNoErrors();
-        foreach ([['household_id' => $b], ['status' => 'DECEASED']] as $change) {
-            $this->patch($this->host.'/admin/krama/people/'.$person, $change + ['version' => 1, 'name' => 'Made Uji', 'status' => 'ACTIVE', 'household_id' => $a])->assertSessionHasErrors('status');
-        }
+        // Constraint tingkat basis data tetap berlaku: tak bisa diakali dengan menulis langsung ke tabel.
         $this->expectException(QueryException::class);
         DB::table('households')->where('id', $b)->update(['head_krama_id' => $person]);
+    }
+
+    public function test_head_moving_household_auto_clears_the_vacated_household_head(): void
+    {
+        $a = $this->household();
+        $b = $this->household('KK-002');
+        $person = $this->person($a);
+        $this->login();
+        $this->patch($this->host.'/admin/krama/households/'.$a, ['version' => 1, 'code' => 'KK-001', 'status' => 'ACTIVE', 'head_krama_id' => $person])->assertSessionHasNoErrors();
+        // Kepala keluarga pindah KK: KK asal otomatis kehilangan kepala keluarganya, tanpa perlu
+        // mengosongkannya secara manual dulu di halaman KK (lihat KramaManager::person()).
+        $this->patch($this->host.'/admin/krama/people/'.$person, ['version' => 1, 'name' => 'Made Uji', 'status' => 'ACTIVE', 'household_id' => $b])
+            ->assertSessionHasNoErrors()->assertSessionHas('success', fn ($m) => str_contains($m, 'KK-001') && str_contains($m, 'tetapkan penggantinya'));
+        $this->assertDatabaseHas('households', ['id' => $a, 'head_krama_id' => null]);
+    }
+
+    public function test_head_becoming_deceased_auto_clears_household_head(): void
+    {
+        $a = $this->household();
+        $person = $this->person($a);
+        $this->login();
+        $this->patch($this->host.'/admin/krama/households/'.$a, ['version' => 1, 'code' => 'KK-001', 'status' => 'ACTIVE', 'head_krama_id' => $person])->assertSessionHasNoErrors();
+        // Kepala keluarga meninggal: KK-nya otomatis kehilangan kepala keluarga (jadi dikecualikan dari
+        // dedosan/iuran/patus sampai penggantinya ditetapkan), Kesinoman tidak perlu bolak-balik ke KK dulu.
+        $this->patch($this->host.'/admin/krama/people/'.$person, ['version' => 1, 'name' => 'Made Uji', 'status' => 'DECEASED', 'household_id' => $a])
+            ->assertSessionHasNoErrors()->assertSessionHas('success', fn ($m) => str_contains($m, 'KK-001') && str_contains($m, 'tetapkan penggantinya'));
+        $this->assertDatabaseHas('households', ['id' => $a, 'head_krama_id' => null]);
+        $this->assertDatabaseHas('krama', ['id' => $person, 'status' => 'DECEASED']);
     }
 
     public function test_cross_tenant_ids_and_relations_are_rejected(): void

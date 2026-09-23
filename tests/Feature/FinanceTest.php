@@ -80,6 +80,10 @@ class FinanceTest extends TestCase
         $krama->household($this->admin, null, ['code' => 'KK-NONAKTIF', 'status' => 'INACTIVE']);
         $this->person = $krama->person($this->admin, null, ['household_id' => $this->household, 'name' => 'Made Finansial', 'status' => 'ACTIVE', 'nik' => '1234567890123456']);
         $this->sibling = $krama->person($this->admin, null, ['household_id' => $this->household, 'name' => 'Wayan Saudara', 'status' => 'ACTIVE']);
+        // Dedosan/iuran hanya dikenakan ke kepala keluarga: Made memimpin KK-001, dan KK-002 punya kepala keluarganya sendiri.
+        DB::table('households')->where('id', $this->household)->update(['head_krama_id' => $this->person]);
+        $secondHead = $krama->person($this->admin, null, ['household_id' => $this->second, 'name' => 'Nyoman Kepala Dua', 'status' => 'ACTIVE']);
+        DB::table('households')->where('id', $this->second)->update(['head_krama_id' => $secondHead]);
         $this->finance = app(FinanceManager::class);
         $this->account = $this->finance->account($this->treasurer, ['name' => 'Kas tunai']);
     }
@@ -108,7 +112,7 @@ class FinanceTest extends TestCase
         $this->context();
         $type = $this->finance->billingType($this->kesinoman, ['name' => $kind.' '.Str::random(5), 'kind' => $kind, 'default_amount' => '25000']);
 
-        return $this->finance->event($this->kesinoman, $overrides + ['billing_type_id' => $type, 'title' => 'Event '.$kind, 'reference' => (string) Str::uuid()]);
+        return $this->finance->event($this->kesinoman, $overrides + ['billing_type_id' => $type, 'title' => 'Event '.$kind, 'reference' => (string) Str::uuid(), 'event_date' => now('Asia/Makassar')->toDateString()]);
     }
 
     private function payment(array $extra = []): array
@@ -190,7 +194,7 @@ class FinanceTest extends TestCase
         $this->assertSame($this->kesinoman->id, $row->created_by);
         $this->assertSame('DRAFT', $row->status);
         $this->assertSame(25000, $row->amount);
-        $this->invalid(fn () => $this->finance->event($this->kesinoman, ['billing_type_id' => $row->billing_type_id, 'title' => 'Duplicate', 'reference' => 'KEMATIAN-A']));
+        $this->invalid(fn () => $this->finance->event($this->kesinoman, ['billing_type_id' => $row->billing_type_id, 'title' => 'Duplicate', 'reference' => 'KEMATIAN-A', 'event_date' => now('Asia/Makassar')->toDateString()]));
         $this->assertSame(1, DB::table('billing_events')->count());
     }
 
@@ -239,10 +243,13 @@ class FinanceTest extends TestCase
         $this->finance->policy($this->admin, ['dedosan_requires_approval' => false]);
         $this->invalid(fn () => $this->finance->issue($this->kesinoman, $event));
         $this->finance->review($this->kelian, $event, ['action' => 'approve', 'review_note' => 'Pemeriksaan selesai']);
+        // Kepala keluarga KK-001 harus dikosongkan dulu sebelum anggotanya berpindah KK (aturan yang sama seperti KramaManager::person()).
+        DB::table('households')->where('id', $this->household)->update(['head_krama_id' => null]);
         DB::table('krama')->where('id', $this->person)->update(['household_id' => $this->second]);
         $this->invalid(fn () => $this->finance->issue($this->kesinoman, $event));
         $this->assertDatabaseCount('bills', 0);
         $next = $this->event('DEDOSAN');
+        DB::table('households')->where('id', $this->second)->update(['head_krama_id' => $this->person]);
         $this->finance->subject($this->kesinoman, $next, ['subject_krama_id' => $this->person, 'reason' => 'Pemeriksaan kejadian baru']);
         $this->finance->issue($this->kesinoman, $next);
         $this->assertDatabaseHas('bills', ['billing_event_id' => $next, 'kk_id' => $this->second]);
@@ -256,6 +263,45 @@ class FinanceTest extends TestCase
         $this->forbidden(fn () => $this->finance->review($this->kesinoman, $event, ['action' => 'approve', 'review_note' => 'Menyetujui sendiri']));
         $this->finance->review($this->kelian, $event, ['action' => 'reject', 'review_note' => 'Alasan tidak memadai']);
         $this->forbidden(fn () => $this->finance->issue($this->kesinoman, $event), 409);
+    }
+
+    public function test_kesinoman_finds_approved_dedosan_to_issue_without_cash_access(): void
+    {
+        DB::table('banjar_modules')->where('banjar_id', $this->a)->where('code', 'NOTIFICATION')->update(['status' => 'ACTIVE']);
+        $event = $this->event('DEDOSAN');
+        $this->finance->subject($this->kesinoman, $event, ['subject_krama_id' => $this->person, 'reason' => 'Tidak hadir ngayah']);
+        $this->login($this->kesinoman);
+        // Kesinoman tidak punya finance.view: buku kas & ringkasan tetap tertutup, tapi ada pintu masuk sendiri.
+        $this->get($this->host.'/admin/finance')->assertForbidden();
+        $this->get($this->host.'/admin')->assertOk()->assertSee('href="/admin/finance/events"', false);
+        $this->get($this->host.'/admin/finance/events')->assertOk()->assertSee('Menunggu persetujuan Kelian (1)')->assertSee('Siap diterbitkan (0)');
+        $this->context();
+        $this->finance->review($this->kelian, $event, ['action' => 'approve', 'review_note' => 'Sesuai presensi']);
+        $this->assertDatabaseHas('notifications', ['user_id' => $this->kesinoman->id, 'type' => 'dedosan.reviewed', 'url' => '/admin/finance/events/'.$event]);
+        $this->get($this->host.'/admin/finance/events')->assertOk()->assertSee('Siap diterbitkan (1)');
+        $this->get($this->host.'/admin')->assertOk()->assertSee('1 event siap diterbitkan');
+    }
+
+    public function test_petengen_marks_cash_payment_with_one_click_from_the_bill_list(): void
+    {
+        $bill = $this->bill();
+        $this->login();
+        $action = '/admin/finance/bills/'.$bill.'/cash-paid';
+        $this->get($this->host.'/admin/finance/bills?q=Made')->assertOk()->assertSee('KK-001')->assertSee('Made Finansial')->assertSee($action, false)->assertDontSee('KK-002');
+        $key = (string) Str::uuid();
+        $this->post($this->host.$action, ['cash_account_id' => $this->account, 'submission_key' => $key])->assertRedirect()->assertSessionHas('success');
+        // Klik ganda (form yang sama) tidak mencatat dua kali.
+        $this->post($this->host.$action, ['cash_account_id' => $this->account, 'submission_key' => $key])->assertRedirect();
+        $this->assertDatabaseHas('bills', ['id' => $bill, 'status' => 'PAID']);
+        $this->assertSame(1, DB::table('bill_settlements')->where('bill_id', $bill)->count());
+        $this->context();
+        $this->assertSame(25000, $this->finance->balance($this->account));
+        $this->get($this->host.'/admin/finance/bills')->assertOk()->assertDontSee($action, false);
+        // Kesinoman boleh melihat daftar, tapi tidak mencatat uang masuk.
+        $other = DB::table('bills')->where('id', '<>', $bill)->value('id');
+        $this->login($this->kesinoman);
+        $this->get($this->host.'/admin/finance/bills')->assertOk()->assertDontSee('/cash-paid', false);
+        $this->post($this->host.'/admin/finance/bills/'.$other.'/cash-paid', ['cash_account_id' => $this->account, 'submission_key' => (string) Str::uuid()])->assertForbidden();
     }
 
     public function test_cash_posts_integer_money_idempotently_and_rejects_overspending(): void
@@ -342,7 +388,7 @@ class FinanceTest extends TestCase
         $foreignType = DB::table('billing_types')->insertGetId(['banjar_id' => $this->b, 'name' => 'Beta', 'kind' => 'IURAN', 'default_amount' => 100]);
         $this->context();
         $this->forbidden(fn () => $this->finance->settle($this->treasurer, $bill, $this->payment(['cash_account_id' => $foreignAccount])), 404);
-        $this->forbidden(fn () => $this->finance->event($this->kesinoman, ['billing_type_id' => $foreignType, 'title' => 'Wrong tenant', 'reference' => 'WRONG']), 404);
+        $this->forbidden(fn () => $this->finance->event($this->kesinoman, ['billing_type_id' => $foreignType, 'title' => 'Wrong tenant', 'reference' => 'WRONG', 'event_date' => now('Asia/Makassar')->toDateString()]), 404);
         $this->login();
         $this->get($this->host.'/admin/finance')->assertOk()->assertDontSee('Beta PRIVATE');
         $this->get($this->host.'/admin/finance/cash?account='.$foreignAccount)->assertNotFound();
@@ -365,7 +411,7 @@ class FinanceTest extends TestCase
             $this->forbidden(fn () => $this->finance->cash($user, $this->payment(['direction' => 'IN', 'amount' => '100', 'reason' => 'Tidak berwenang'])));
         }
         // Bendahara mengelola kas, tapi tidak lagi otomatis berhak menetapkan tagihan hanya karena peran Petengen.
-        $this->forbidden(fn () => $this->finance->event($this->treasurer, ['billing_type_id' => 1, 'title' => 'Tanpa izin', 'reference' => 'NOPERM']));
+        $this->forbidden(fn () => $this->finance->event($this->treasurer, ['billing_type_id' => 1, 'title' => 'Tanpa izin', 'reference' => 'NOPERM', 'event_date' => now('Asia/Makassar')->toDateString()]));
         $this->login();
         DB::table('banjar_modules')->where('banjar_id', $this->a)->where('code', 'FINANCE')->update(['status' => 'INACTIVE']);
         $this->get($this->host.'/admin')->assertOk()->assertDontSee('href="/admin/finance"', false);
@@ -410,11 +456,11 @@ class FinanceTest extends TestCase
 
     public function test_issue_batches_more_than_250_households_without_skips_or_duplicates(): void
     {
-        $rows = [];
         for ($i = 1; $i <= 260; $i++) {
-            $rows[] = ['banjar_id' => $this->a, 'code' => 'BATCH-'.$i, 'status' => 'ACTIVE'];
+            $householdId = DB::table('households')->insertGetId(['banjar_id' => $this->a, 'code' => 'BATCH-'.$i, 'status' => 'ACTIVE', 'created_at' => now(), 'updated_at' => now()]);
+            $headId = DB::table('krama')->insertGetId(['banjar_id' => $this->a, 'household_id' => $householdId, 'name' => 'Kepala Batch '.$i, 'status' => 'ACTIVE', 'created_at' => now(), 'updated_at' => now()]);
+            DB::table('households')->where('id', $householdId)->update(['head_krama_id' => $headId]);
         }
-        DB::table('households')->insert($rows);
         $event = $this->event();
         $this->finance->issue($this->kesinoman, $event);
         $this->finance->issue($this->kesinoman, $event);

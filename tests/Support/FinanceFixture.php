@@ -40,16 +40,35 @@ final class FinanceFixture
         $people = [];
         for ($i = 1; $i <= 3; $i++) {
             $kk = $krama->household($admin, null, ['code' => 'KK-QA-00'.$i, 'status' => 'ACTIVE']);
-            $people[] = $krama->person($admin, null, ['household_id' => $kk, 'name' => 'Krama Uji '.$i, 'status' => 'ACTIVE']);
+            $person = $krama->person($admin, null, ['household_id' => $kk, 'name' => 'Krama Uji '.$i, 'status' => 'ACTIVE']);
+            // Dedosan/iuran hanya dikenakan ke kepala keluarga; jadikan satu-satunya anggota sebagai kepala keluarga.
+            DB::table('households')->where('id', $kk)->update(['head_krama_id' => $person]);
+            $people[] = $person;
         }
         $finance = app(FinanceManager::class);
         $account = $finance->account($treasurer, ['name' => 'Kas tunai Banjar']);
         // Kesinoman menetapkan/menerbitkan iuran dan dedosan; Petengen mengelola kas (Master Prompt §27-29).
         $type = $finance->billingType($kesinoman, ['name' => 'Iuran bulanan', 'kind' => 'IURAN', 'default_amount' => 50000]);
-        $event = $finance->event($kesinoman, ['billing_type_id' => $type, 'title' => 'Iuran September 2026', 'reference' => 'IURAN-2026-09']);
+        $event = $finance->event($kesinoman, ['billing_type_id' => $type, 'title' => 'Iuran September 2026', 'reference' => 'IURAN-2026-09', 'event_date' => now('Asia/Makassar')->toDateString()]);
         $dedosanType = $finance->billingType($kesinoman, ['name' => 'Dedosan kegiatan', 'kind' => 'DEDOSAN', 'default_amount' => 100000]);
-        $dedosan = $finance->event($kesinoman, ['billing_type_id' => $dedosanType, 'title' => 'Dedosan pemeriksaan manual', 'reference' => 'DEDOSAN-QA-001']);
+        $dedosan = $finance->event($kesinoman, ['billing_type_id' => $dedosanType, 'title' => 'Dedosan pemeriksaan manual', 'reference' => 'DEDOSAN-QA-001', 'event_date' => now('Asia/Makassar')->toDateString()]);
 
         return compact('tenant', 'password', 'users', 'account', 'type', 'event', 'dedosan', 'people');
+    }
+
+    // QRIS hanya dibayar warga sendiri (payment.self): akun Krama yang terhubung ke kepala keluarga tagihan ini.
+    public static function payer(int $tenant, int $billId): User
+    {
+        $household = DB::table('bills')->where('id', $billId)->value('kk_id');
+        $head = DB::table('households')->where('id', $household)->value('head_krama_id');
+        if ($existing = DB::table('krama')->where('id', $head)->value('user_id')) {
+            return User::findOrFail($existing);
+        }
+        $user = User::factory()->create();
+        $member = DB::table('banjar_user_memberships')->insertGetId(['banjar_id' => $tenant, 'user_id' => $user->id, 'status' => 'ACTIVE']);
+        DB::table('tenant_role_assignments')->insert(['banjar_id' => $tenant, 'membership_id' => $member, 'role_id' => DB::table('roles')->where('code', 'KRAMA')->value('id'), 'scope_type' => 'BANJAR']);
+        DB::table('krama')->where('id', $head)->update(['user_id' => $user->id]);
+
+        return $user;
     }
 }

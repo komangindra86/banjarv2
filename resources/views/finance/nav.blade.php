@@ -1,5 +1,6 @@
 @php($links = [])
 @if($fa->tenant(auth()->user(), 'finance.view'))@php($links['/admin/finance'] = 'Ringkasan')@endif
+@php($links['/admin/finance/events'] = 'Event tagihan')
 @if($canCash)@php($links['/admin/finance/cash'] = 'Buku kas')@endif
 @php($links['/admin/finance/bills'] = 'Tagihan')
 @if($canCash)@php($links['/admin/finance/reports'] = 'Laporan')@endif

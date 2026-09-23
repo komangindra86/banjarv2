@@ -77,10 +77,12 @@ document.querySelectorAll('[data-rupiah]').forEach((display) => {
         if (t === '') return { ok: true, digits: '' };
         if (/^-/.test(t)) return { ok: false, message: 'Nominal tidak boleh negatif.' };
         if (/,/.test(t)) return { ok: false, message: 'Gunakan angka bulat, tanpa koma desimal.' };
-        const stripped = t.replace(/^Rp\s*/i, '');
+        // Titik di sini hanya pemisah ribuan yang kita sisipkan sendiri — saat mengetik di tengah angka,
+        // posisi titik sementara bisa "tidak rapi" (mis. "1590.000") walau angkanya tetap valid, jadi
+        // titik dilepas dulu sebelum divalidasi, bukan divalidasi posisinya.
+        const stripped = t.replace(/^Rp\s*/i, '').replace(/\./g, '');
         if (/^[0-9]+$/.test(stripped)) return { ok: true, digits: stripped.replace(/^0+(?=\d)/, '') || '0' };
-        if (/^[0-9]{1,3}(\.[0-9]{3})+$/.test(stripped)) return { ok: true, digits: stripped.replace(/\./g, '') };
-        return { ok: false, message: 'Nilai tidak valid. Contoh: 1.500.000.' };
+        return { ok: false, message: 'Nilai tidak valid. Gunakan angka saja.' };
     };
     const reformat = () => {
         const pos = display.selectionStart ?? display.value.length;
@@ -181,6 +183,13 @@ if (cashDirection) {
 document.querySelectorAll('[data-open-category-dialog]').forEach((btn) => {
     btn.addEventListener('click', () => document.querySelector(btn.dataset.openCategoryDialog)?.showModal());
 });
+// Dialog generik: terbuka otomatis begitu halaman dimuat (mis. baru saja mengubah status krama jadi
+// Meninggal), dan tombol tutup generik yang tidak bergantung pada logika form tertentu.
+document.querySelectorAll('dialog[data-auto-open]').forEach((dialog) => dialog.showModal());
+document.querySelectorAll('select[data-auto-submit]').forEach((select) => select.addEventListener('change', () => select.form?.submit()));
+document.querySelectorAll('dialog [data-close-dialog]').forEach((btn) => {
+    btn.addEventListener('click', () => btn.closest('dialog')?.close());
+});
 document.querySelectorAll('[data-quick-category]').forEach((form) => {
     const dialog = form.closest('dialog');
     const errorBox = form.querySelector('[data-quick-error]');
@@ -222,6 +231,18 @@ document.querySelectorAll('[data-role-select]').forEach((select) => {
     };
     select.addEventListener('change', sync);
     sync();
+});
+
+// Satu klik menandai "Pilih untuk dedosan" pada setiap KK yang masih PENDING dan punya kepala keluarga,
+// memakai pilihan yang sudah disarankan di dropdown penanggung jawab — Kesinoman tinggal tinjau lalu kirim.
+document.querySelectorAll('[data-select-all-suggested]').forEach((button) => {
+    button.addEventListener('click', () => {
+        button.closest('form')?.querySelectorAll('[data-candidate-status="PENDING"]').forEach((row) => {
+            const decision = row.querySelector('select[name$="[decision]"]');
+            const responsible = row.querySelector('select[name$="[responsible_krama_id]"]');
+            if (decision && responsible && responsible.options.length) decision.value = 'SELECT';
+        });
+    });
 });
 
 const pushToggle = document.querySelector('#push-toggle');

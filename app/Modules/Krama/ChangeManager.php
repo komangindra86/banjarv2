@@ -50,6 +50,11 @@ final class ChangeManager
             $field = $data['field'];
             // A self-service applicant cannot set operational status without review; all fields follow the same workflow.
             $value = Validator::make([$field => $input['value'] ?? null], [$field => $this->manager->personRules()[$field]])->validate()[$field] ?? null;
+            // "nullable" lets an empty <select>/<input> pass through as '' rather than null; normalize before storing
+            // so a cleared date/enum field never reaches the database as an invalid empty string.
+            if ($value === '') {
+                $value = null;
+            }
             $old = $field === 'nik' && $row->nik ? Crypt::decryptString($row->nik) : $row->$field;
             if ($old === $value) {
                 throw ValidationException::withMessages(['value' => 'Nilai baru masih sama dengan data saat ini.']);

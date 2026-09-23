@@ -131,12 +131,12 @@ class NotificationTest extends TestCase
         $finance = app(FinanceManager::class);
         DB::table('banjar_settings')->where('banjar_id', $this->tenant)->update(['dedosan_requires_approval' => false]);
         $type = $finance->billingType($this->kesinoman, ['name' => 'Dedosan tanpa approval', 'kind' => 'DEDOSAN', 'default_amount' => 50000]);
-        $finance->event($this->kesinoman, ['billing_type_id' => $type, 'title' => 'Event 1', 'reference' => (string) Str::uuid()]);
+        $finance->event($this->kesinoman, ['billing_type_id' => $type, 'title' => 'Event 1', 'reference' => (string) Str::uuid(), 'event_date' => now('Asia/Makassar')->toDateString()]);
         $this->assertSame(0, $this->unreadFor($this->kelian));
 
         DB::table('banjar_settings')->where('banjar_id', $this->tenant)->update(['dedosan_requires_approval' => true]);
         $type2 = $finance->billingType($this->kesinoman, ['name' => 'Dedosan dengan approval', 'kind' => 'DEDOSAN', 'default_amount' => 50000]);
-        $finance->event($this->kesinoman, ['billing_type_id' => $type2, 'title' => 'Event 2', 'reference' => (string) Str::uuid()]);
+        $finance->event($this->kesinoman, ['billing_type_id' => $type2, 'title' => 'Event 2', 'reference' => (string) Str::uuid(), 'event_date' => now('Asia/Makassar')->toDateString()]);
         $this->assertSame(1, $this->unreadFor($this->kelian));
     }
 

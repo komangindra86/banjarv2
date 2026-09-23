@@ -31,7 +31,7 @@ Http::fake(function ($request) {
 });
 $ids = [];
 foreach (DB::table('bills')->orderBy('id')->get() as $bill) {
-    $ids[] = app(PaymentManager::class)->create($actor, $bill->id);
+    $ids[] = app(PaymentManager::class)->create(FinanceFixture::payer($fixture['tenant'], $bill->id), $bill->id);
 }
 app(PaymentManager::class)->sync($ids[0]);
 $super = User::whereIn('id', DB::table('platform_role_assignments')->select('user_id'))->firstOrFail();

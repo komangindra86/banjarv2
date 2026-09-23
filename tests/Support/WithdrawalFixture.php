@@ -37,7 +37,7 @@ final class WithdrawalFixture
         $approver = self::platformUser();
         foreach (DB::table('bills')->where('banjar_id', $fixture['tenant'])->where('status', 'UNPAID')->orderBy('id')->limit($paidBills)->pluck('id') as $bill) {
             app(CurrentBanjar::class)->set(DB::table('banjars')->find($fixture['tenant']));
-            $payment = app(PaymentManager::class)->create($treasurer, $bill);
+            $payment = app(PaymentManager::class)->create(FinanceFixture::payer($fixture['tenant'], $bill), $bill);
             app(PaymentManager::class)->sync($payment);
             app(SettlementManager::class)->submit($submitter, $payment, ['reference' => 'Laporan settlement bank WD-'.$payment, 'gateway_fee' => 350, 'settled_at' => now('Asia/Makassar')->format('Y-m-d\TH:i')]);
             app(SettlementManager::class)->approve($approver, $payment);

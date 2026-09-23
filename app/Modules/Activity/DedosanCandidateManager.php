@@ -55,11 +55,11 @@ final class DedosanCandidateManager
             $update = ['status' => 'PENDING', 'responsible_krama_id' => null, 'note' => null, 'decided_by' => null, 'decided_at' => null];
             if ($data['decision'] === 'SELECT') {
                 $person = (int) $data['responsible_krama_id'];
-                // The responsible individual must currently belong to the same active KK; one KK yields one individual.
-                $valid = $this->query->table('krama')->where('id', $person)->where('household_id', $candidate->household_id)->where('status', 'ACTIVE')->exists()
-                    && $this->query->table('households')->where('id', $candidate->household_id)->where('status', 'ACTIVE')->exists();
+                // Dedosan hanya dikenakan ke kepala keluarga aktif dari KK yang bersangkutan.
+                $valid = $this->query->table('krama')->where('id', $person)->where('status', 'ACTIVE')->exists()
+                    && $this->query->table('households')->where('id', $candidate->household_id)->where('status', 'ACTIVE')->where('head_krama_id', $person)->exists();
                 if (! $valid) {
-                    throw ValidationException::withMessages(['responsible_krama_id' => 'Pilih anggota aktif dari KK '.$candidate->household_code.'.']);
+                    throw ValidationException::withMessages(['responsible_krama_id' => 'Pilih kepala keluarga aktif dari KK '.$candidate->household_code.'.']);
                 }
                 $update = ['status' => 'SELECTED', 'responsible_krama_id' => $person, 'note' => $data['note'] ?? null, 'decided_by' => $actor->id, 'decided_at' => now()];
             } elseif ($data['decision'] === 'DISMISS') {
@@ -99,10 +99,10 @@ final class DedosanCandidateManager
                 }
                 if ($row['decision'] === 'SELECT') {
                     $person = (int) $row['responsible_krama_id'];
-                    $valid = $this->query->table('krama')->where('id', $person)->where('household_id', $candidate->household_id)->where('status', 'ACTIVE')->exists()
-                        && $this->query->table('households')->where('id', $candidate->household_id)->where('status', 'ACTIVE')->exists();
+                    $valid = $this->query->table('krama')->where('id', $person)->where('status', 'ACTIVE')->exists()
+                        && $this->query->table('households')->where('id', $candidate->household_id)->where('status', 'ACTIVE')->where('head_krama_id', $person)->exists();
                     if (! $valid) {
-                        $errors[] = "Pilih anggota aktif dari KK {$candidate->household_code}.";
+                        $errors[] = "Pilih kepala keluarga aktif dari KK {$candidate->household_code}.";
 
                         continue;
                     }
@@ -146,7 +146,7 @@ final class DedosanCandidateManager
             $date = Carbon::parse($activity->starts_at)->timezone('Asia/Makassar');
             // Reuses the Phase 5 dedosan workflow: event starts as DRAFT and follows Kelian approval policy before issue.
             $eventId = $this->billing->event($actor, ['billing_type_id' => $type->id, 'title' => mb_substr('Dedosan: '.$activity->title, 0, 150), 'reference' => 'DEDOSAN-KEG-'.$activity->id,
-                'amount' => $data['amount'] ?? null, 'due_date' => $data['due_date'] ?? null]);
+                'event_date' => $date->toDateString(), 'amount' => $data['amount'] ?? null, 'due_date' => $data['due_date'] ?? null]);
             foreach ($selected as $candidate) {
                 $reason = 'Tidak hadir pada '.$activity->title.' ('.$date->translatedFormat('d F Y').'), KK '.$candidate->household_code.'.'.($candidate->note ? ' Catatan: '.$candidate->note : '');
                 $this->billing->subject($actor, $eventId, ['subject_krama_id' => $candidate->responsible_krama_id, 'reason' => mb_substr($reason, 0, 1000)]);

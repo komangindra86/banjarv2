@@ -106,6 +106,7 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
         Route::post('/types', [FinanceController::class, 'storeType']);
         Route::post('/types/{id}/toggle', [FinanceController::class, 'toggleType'])->whereNumber('id');
         Route::patch('/policy', [FinanceController::class, 'policy']);
+        Route::get('/events', [FinanceController::class, 'events']);
         Route::get('/events/create', [FinanceController::class, 'createEvent']);
         Route::post('/events', [FinanceController::class, 'storeEvent'])->middleware('throttle:30,1');
         Route::get('/events/{id}', [FinanceController::class, 'event'])->whereNumber('id');
@@ -125,6 +126,7 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
         Route::get('/bills', [FinanceController::class, 'bills']);
         Route::get('/bills/{id}', [FinanceController::class, 'bill'])->whereNumber('id');
         Route::post('/bills/{id}/settle', [FinanceController::class, 'settle'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post('/bills/{id}/cash-paid', [FinanceController::class, 'payCash'])->whereNumber('id')->middleware('throttle:120,1');
         Route::get('/cash', [FinanceController::class, 'cash']);
         Route::post('/cash', [FinanceController::class, 'storeCash'])->middleware('throttle:30,1');
         Route::post('/cash/{id}/reverse', [FinanceController::class, 'reverse'])->whereNumber('id')->middleware('throttle:30,1');

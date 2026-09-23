@@ -22,18 +22,28 @@ final class KramaController extends Controller
         $people = ($filters['tab'] ?? '') === 'people';
         $rows = $people ? $this->scope->people($request->user()) : $this->scope->households($request->user());
         $table = $people ? 'krama' : 'households';
+        if ($people) {
+            $rows->select('krama.*')
+                ->leftJoin('households', 'households.id', '=', 'krama.household_id')
+                ->addSelect(['households.code as household_code', 'households.head_krama_id as household_head_krama_id']);
+        } else {
+            $rows->select('households.*')
+                ->leftJoin('krama as head', 'head.id', '=', 'households.head_krama_id')
+                ->addSelect('head.name as head_name')
+                ->selectSub($this->query->table('krama')->whereColumn('krama.household_id', 'households.id')->selectRaw('count(*)'), 'members_count');
+        }
         if (! empty($filters['q'])) {
             $term = '%'.addcslashes($filters['q'], '%_\\').'%';
-            $rows->where(function ($q) use ($people, $term) {
+            $rows->where(function ($q) use ($people, $term, $table) {
                 if ($people) {
                     $q->where('name', 'like', $term);
                 } else {
-                    $q->where('code', 'like', $term)->orWhereIn('id', $this->query->table('krama')->where('name', 'like', $term)->select('household_id'));
+                    $q->where('code', 'like', $term)->orWhereIn($table.'.id', $this->query->table('krama')->where('name', 'like', $term)->select('household_id'));
                 }
             });
         }
         if (! empty($filters['status'])) {
-            $rows->where('status', $filters['status']);
+            $rows->where($table.'.status', $filters['status']);
         }
         if (! empty($filters['unit'])) {
             abort_unless($this->scope->units($request->user())->where('id', $filters['unit'])->exists(), 404);
@@ -45,7 +55,7 @@ final class KramaController extends Controller
             });
         }
 
-        return view('admin.krama.index', ['rows' => $rows->orderBy($people ? 'name' : 'code')->paginate(18)->withQueryString(), 'people' => $people, 'units' => $this->scope->units($request->user())->get()]);
+        return view('admin.krama.index', ['rows' => $rows->orderBy($people ? 'name' : 'code')->paginate(30)->withQueryString(), 'people' => $people, 'units' => $this->scope->units($request->user())->get()]);
     }
 
     public function household(Request $request, ?int $id = null)
@@ -82,16 +92,53 @@ final class KramaController extends Controller
             // Only show a neutral reference when the household itself is outside scope.
             $households->push((object) ['id' => $row->household_id, 'code' => 'KK saat ini']);
         }
+        // Datang dari "+ Anggota" pada halaman KK: kunci KK-nya, jangan tampilkan pemilih bebas ke semua KK lain.
+        $lockedHousehold = (! $id && $request->filled('household')) ? $households->firstWhere('id', $request->integer('household')) : null;
+        // "Kepala Keluarga" hanya ditentukan lewat halaman KK (head_krama_id), bukan lewat pilihan hubungan di sini.
+        $isHead = $row && $this->query->table('households')->where('id', $row->household_id)->where('head_krama_id', $row->id)->exists();
         $accounts = $this->access->tenant($actor, 'krama.configure') ? $this->query->table('banjar_user_memberships')->join('users', 'users.id', '=', 'banjar_user_memberships.user_id')->where('banjar_user_memberships.status', 'ACTIVE')->select('users.id', 'users.name', 'users.email')->get() : collect();
+        // Patus dikenakan setiap ada kematian: begitu status krama "Meninggal", tawarkan jalan pintas
+        // membuat draf tagihan patus langsung dari sini — jenis, judul, kode, dan tanggal sudah terisi
+        // otomatis, tinggal konfirmasi (lihat dialog di admin.krama.person dan promptPatus di savePerson()).
+        $canPatus = $row && $row->status === 'DECEASED' && $this->access->tenant($actor, 'billing.issue');
+        $patusTypes = $canPatus ? $this->query->table('billing_types')->where('kind', 'PATUS')->where('is_active', true)->orderBy('name')->get() : collect();
+        // Kalau cuma ada satu jenis Patus (kasus paling umum), judul otomatis pakai namanya. Kalau lebih
+        // dari satu (mis. nominal berbeda per situasi), dialog menampilkan pilihan alih-alih menebak.
+        $patusType = $patusTypes->count() === 1 ? $patusTypes->first() : null;
+        $patusDraft = null;
+        if ($patusTypes->isNotEmpty()) {
+            $now = now('Asia/Makassar');
+            $patusDraft = ['title' => 'Patus - '.$row->name, 'reference' => 'PATUS-'.$now->format('Ymd-His'), 'event_date' => $now->toDateString()];
+        }
 
-        return view('admin.krama.person', ['row' => $row, 'canEdit' => $canEdit, 'households' => $households, 'accounts' => $accounts, 'units' => $this->scope->units($actor, $canEdit ? 'krama.manage' : 'krama.view')->get(), 'selectedUnits' => $id ? $this->query->table('krama_unit_memberships')->where('krama_id', $id)->pluck('unit_id')->all() : []]);
+        return view('admin.krama.person', ['row' => $row, 'canEdit' => $canEdit, 'households' => $households, 'lockedHousehold' => $lockedHousehold, 'isHead' => $isHead, 'accounts' => $accounts, 'canPatus' => $canPatus, 'patusTypes' => $patusTypes, 'patusType' => $patusType, 'patusDraft' => $patusDraft, 'units' => $this->scope->units($actor, $canEdit ? 'krama.manage' : 'krama.view')->get(), 'selectedUnits' => $id ? $this->query->table('krama_unit_memberships')->where('krama_id', $id)->pluck('unit_id')->all() : []]);
     }
 
     public function savePerson(Request $request, KramaManager $manager, ?int $id = null)
     {
-        $id = $manager->person($request->user(), $id, $request->all());
+        $creating = ! $id;
+        // Dicatat sebelum disimpan supaya bisa dibandingkan setelahnya — lihat catatan auto-clear di
+        // KramaManager::person(): kalau orang ini kepala keluarga suatu KK sebelum perubahan, tapi
+        // sesudahnya bukan lagi, KK itu baru saja kehilangan kepala keluarganya secara otomatis.
+        $wasHeadOf = $id ? $this->query->table('households')->where('head_krama_id', $id)->value('code') : null;
+        $wasDeceased = $id && $this->query->table('krama')->where('id', $id)->value('status') === 'DECEASED';
+        $newId = $manager->person($request->user(), $id, $request->all());
+        if ($creating) {
+            // Kembali ke daftar anggota KK, bukan ke halaman krama yang baru dibuat sendirian.
+            return redirect('/admin/krama/households/'.$request->integer('household_id'))->with('success', 'Anggota ditambahkan.');
+        }
+        $message = 'Data krama disimpan.';
+        if ($wasHeadOf && ! $this->query->table('households')->where('head_krama_id', $newId)->exists()) {
+            $message .= ' KK '.$wasHeadOf.' kini belum memiliki kepala keluarga — tetapkan penggantinya di halaman KK.';
+        }
+        $redirect = redirect('/admin/krama/people/'.$newId)->with('success', $message);
+        // Baru saja berubah jadi Meninggal (bukan yang memang sudah lama begitu): tawarkan langsung
+        // lewat dialog konfirmasi di halaman krama, bukan diam-diam menaruh tautan yang mudah terlewat.
+        if (! $wasDeceased && $request->input('status') === 'DECEASED') {
+            $redirect->with('promptPatus', true);
+        }
 
-        return redirect('/admin/krama/people/'.$id)->with('success', 'Data krama disimpan.');
+        return $redirect;
     }
 
     public function units(Request $request)
@@ -118,8 +165,10 @@ final class KramaController extends Controller
     public function mine(Request $request)
     {
         $this->scope->authorize($request->user(), 'krama.self');
+        $row = $this->query->table('krama')->where('user_id', $request->user()->id)->first();
+        $isHead = $row && $this->query->table('households')->where('id', $row->household_id)->where('head_krama_id', $row->id)->exists();
 
-        return view('admin.krama.mine', ['row' => $this->query->table('krama')->where('user_id', $request->user()->id)->first()]);
+        return view('admin.krama.mine', ['row' => $row, 'isHead' => $isHead]);
     }
 
     public function changes(Request $request, ChangeManager $manager)

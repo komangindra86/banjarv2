@@ -85,7 +85,7 @@ class PaymentTest extends TestCase
     private function create(): object
     {
         $this->context();
-        $id = app(PaymentManager::class)->create($this->actor, $this->bill);
+        $id = app(PaymentManager::class)->create(FinanceFixture::payer($this->fixture['tenant'], $this->bill), $this->bill);
 
         return DB::table('payments')->find($id);
     }
@@ -357,6 +357,8 @@ class PaymentTest extends TestCase
         $this->tenantSession($krama)->get($host.'/admin/payments')->assertForbidden();
         $this->tenantSession()->get($host.'/admin/payments')->assertOk();
         $this->context();
+        // QRIS hanya dari portal warga: Petengen tidak bisa membuat pembayaran QRIS atas nama warga.
+        $this->rejected(fn () => app(PaymentManager::class)->create($this->actor, $other), 403);
         $this->rejected(fn () => app(SettlementManager::class)->submit($this->actor, $p->id, []), 403);
         $super = $this->platformUser();
         $b = app(TenantManager::class)->create($super, ['name' => 'Other Banjar', 'slug' => 'payment-other', 'admin_name' => 'Other', 'admin_email' => 'other-payment@example.test', 'admin_password' => 'Test-Password-123456', 'admin_password_confirmation' => 'Test-Password-123456']);

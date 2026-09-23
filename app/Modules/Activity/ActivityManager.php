@@ -313,17 +313,25 @@ final class ActivityManager
             }
             $absent = $this->query->table('activity_participants')->where('activity_id', $activity->id)->where('status', 'TIDAK_HADIR')->orderBy('id')->get()->groupBy('household_id');
             $heads = $this->query->table('households')->whereIn('id', $absent->keys()->all() ?: [0])->pluck('head_krama_id', 'id');
+            $candidateCount = 0;
             foreach ($absent as $household => $rows) {
+                $head = $heads[$household] ?? null;
+                if (! $head) {
+                    // Dedosan hanya dikenakan ke kepala keluarga; KK tanpa kepala keluarga dikecualikan
+                    // sampai kepala keluarganya ditetapkan di halaman KK.
+                    continue;
+                }
                 $first = $rows->first();
-                $suggested = $first->basis === 'PERSON' ? (int) $first->krama_id : ($heads[$household] ? (int) $heads[$household] : null);
                 // Absence creates a candidate for review, never a bill (Rule 11). One candidate per KK (Rule 10).
+                // The responsible party is always the head of household, regardless of which member(s) were absent.
                 DB::table('dedosan_candidates')->insertOrIgnore(['banjar_id' => $this->tenant->id(), 'activity_id' => $activity->id, 'household_id' => $household, 'household_code' => $first->household_code,
-                    'absent_count' => $rows->count(), 'suggested_krama_id' => $suggested, 'created_at' => now(), 'updated_at' => now()]);
+                    'absent_count' => $rows->count(), 'suggested_krama_id' => (int) $head, 'created_at' => now(), 'updated_at' => now()]);
+                $candidateCount++;
             }
             $this->query->table('activities')->where('id', $activity->id)->update(['attendance_status' => 'VERIFIED', 'verified_by' => $actor->id, 'verified_at' => now(), 'updated_at' => now()]);
-            $this->log($actor, 'attendance.verified', $activity->id, ['status' => 'VERIFIED', 'amount' => $absent->count()]);
+            $this->log($actor, 'attendance.verified', $activity->id, ['status' => 'VERIFIED', 'amount' => $candidateCount]);
 
-            return $absent->count();
+            return $candidateCount;
         });
     }
 

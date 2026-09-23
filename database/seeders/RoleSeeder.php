@@ -21,7 +21,7 @@ final class RoleSeeder extends Seeder
         foreach (['ADMIN_BANJAR', 'KELIAN', 'PETENGEN'] as $code) {
             $roles[$code][2][] = 'payment.view';
         }
-        $roles['PETENGEN'][2][] = 'payment.create';
+        // Pembayaran QRIS hanya dilakukan warga sendiri lewat portal (payment.self); Petengen mencatat tunai.
         $roles['KRAMA'][2][] = 'payment.self';
         // Fase 7: manual withdrawal. Platform transfer rights stay separate from tenant roles.
         foreach (['ADMIN_BANJAR', 'KELIAN', 'PETENGEN'] as $code) {

@@ -14,9 +14,13 @@ use Illuminate\Validation\ValidationException;
 
 final class KramaManager
 {
-    public const FIELDS = ['name' => 'Nama', 'nik' => 'NIK', 'birth_date' => 'Tanggal lahir', 'phone' => 'Telepon', 'status' => 'Status'];
+    public const FIELDS = ['name' => 'Nama', 'nik' => 'NIK', 'birth_date' => 'Tanggal lahir', 'phone' => 'Telepon', 'status' => 'Status', 'relationship' => 'Status hubungan keluarga'];
 
     public const STATUSES = ['ACTIVE' => 'Aktif', 'INACTIVE' => 'Nonaktif', 'MOVED' => 'Pindah', 'DECEASED' => 'Meninggal'];
+
+    // "Kepala Keluarga" bukan pilihan di sini — itu ditentukan lewat households.head_krama_id (lihat household.blade.php)
+    // dan selalu menimpa label hubungan yang tersimpan pada anggota tersebut.
+    public const RELATIONSHIPS = ['ISTRI_SUAMI' => 'Istri/Suami', 'ANAK' => 'Anak', 'ORANG_TUA' => 'Orang Tua', 'MERTUA' => 'Mertua', 'FAMILI_LAIN' => 'Famili Lain'];
 
     public function __construct(private TenantQuery $query, private CurrentBanjar $tenant, private KramaAccess $access, private Audit $audit) {}
 
@@ -76,7 +80,11 @@ final class KramaManager
                 'address' => ['nullable', 'string', 'max:1000'], 'family_number' => ['nullable', 'regex:/^[0-9]{16}$/'],
                 'status' => ['required', Rule::in(['ACTIVE', 'INACTIVE'])], 'head_krama_id' => ['nullable', 'integer'],
                 'clear_family_number' => ['sometimes', 'boolean'],
+                // Anggota pertama hanya berlaku saat membuat KK baru, agar KK + kepala keluarga bisa selesai dalam satu formulir.
+                'head_name' => ['nullable', 'string', 'max:150'],
             ])->validate();
+            $headName = $id ? null : trim((string) ($data['head_name'] ?? ''));
+            unset($data['head_name']);
             $head = $data['head_krama_id'] ?? null;
             if ($head && (! $id || ! $this->query->table('krama')->where('id', $head)->where('household_id', $id)->where('status', 'ACTIVE')->exists())) {
                 $this->fail('head_krama_id', 'Kepala keluarga harus anggota aktif KK ini.');
@@ -105,13 +113,21 @@ final class KramaManager
             $this->syncUnits('household', $id, $units, $scope);
             $this->audit->record($this->tenant->id(), $actor->id, $old ? 'household.updated' : 'household.created', 'household', $id);
 
+            if ($headName !== '' && $headName !== null) {
+                // Anggota baru mewarisi akses lewat unit KK-nya sendiri; tidak perlu unit_ids terpisah.
+                $headId = DB::table('krama')->insertGetId(['banjar_id' => $this->tenant->id(), 'household_id' => $id, 'name' => $headName,
+                    'status' => 'ACTIVE', 'version' => 1, 'created_at' => now(), 'updated_at' => now()]);
+                $this->query->table('households')->where('id', $id)->update(['head_krama_id' => $headId, 'updated_at' => now()]);
+                $this->audit->record($this->tenant->id(), $actor->id, 'krama.created', 'krama', $headId);
+            }
+
             return $id;
         });
     }
 
     public function personRules(): array
     {
-        return ['name' => ['required', 'string', 'max:150'], 'nik' => ['nullable', 'regex:/^[0-9]{16}$/'], 'birth_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today'], 'phone' => ['nullable', 'regex:/^[+0-9 ()-]{6,30}$/'], 'status' => ['required', Rule::in(array_keys(self::STATUSES))]];
+        return ['name' => ['required', 'string', 'max:150'], 'nik' => ['nullable', 'regex:/^[0-9]{16}$/'], 'birth_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today'], 'phone' => ['nullable', 'regex:/^[+0-9 ()-]{6,30}$/'], 'status' => ['required', Rule::in(array_keys(self::STATUSES))], 'relationship' => ['nullable', Rule::in(array_keys(self::RELATIONSHIPS))]];
     }
 
     public function person(User $actor, ?int $id, array $input): int
@@ -126,6 +142,10 @@ final class KramaManager
                 $this->version($old, $input);
             }
             $data = Validator::make($input, $this->personRules() + ['household_id' => ['required', 'integer'], 'user_id' => ['nullable', 'integer'], 'clear_nik' => ['sometimes', 'boolean']])->validate();
+            // "nullable" lets an empty <select> value pass validation as '', but the ENUM column rejects '' — normalize.
+            if (($data['relationship'] ?? null) === '') {
+                $data['relationship'] = null;
+            }
             // Editing a unit-specific person does not allow moving an inaccessible household.
             $household = $this->query->table('households')->where('id', $data['household_id'])->first();
             abort_unless($household, 404);
@@ -138,8 +158,16 @@ final class KramaManager
                     $this->fail('household_id', 'KK tujuan harus aktif.');
                 }
             }
-            if ($old && $this->query->table('households')->where('head_krama_id', $id)->exists() && ($old->household_id !== (int) $data['household_id'] || $data['status'] !== 'ACTIVE')) {
-                $this->fail('status', 'Ganti atau kosongkan kepala keluarga dahulu.');
+            // Kepala keluarga yang pindah KK atau tidak lagi aktif (meninggal/nonaktif/pindah) otomatis
+            // dilepas dari KK asalnya — Kesinoman tidak perlu bolak-balik ke halaman KK untuk mengosongkan
+            // kepala keluarga secara manual dulu sebelum bisa menyimpan perubahan ini. KK yang jadi tanpa
+            // kepala keluarga otomatis dikecualikan dari dedosan/iuran/patus sampai penggantinya ditetapkan.
+            if ($old && ($old->household_id !== (int) $data['household_id'] || $data['status'] !== 'ACTIVE')) {
+                $vacated = $this->query->table('households')->where('head_krama_id', $id)->first();
+                if ($vacated) {
+                    $this->query->table('households')->where('id', $vacated->id)->update(['head_krama_id' => null, 'updated_at' => now()]);
+                    $this->audit->record($this->tenant->id(), $actor->id, 'krama.head_auto_cleared', 'households', $vacated->id, ['head_krama_id' => $id], ['head_krama_id' => null]);
+                }
             }
             $scope = $this->access->unitIds($actor, 'krama.manage');
             $userId = array_key_exists('user_id', $data) ? $data['user_id'] : ($old->user_id ?? null);

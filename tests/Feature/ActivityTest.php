@@ -295,7 +295,8 @@ class ActivityTest extends TestCase
         $this->assertDatabaseCount('bills', 0);
         $this->assertSame(1, DB::table('dedosan_candidates')->where('activity_id', $id)->where('household_id', $this->kk['B'])->count());
         $this->assertDatabaseHas('dedosan_candidates', ['activity_id' => $id, 'household_id' => $this->kk['B'], 'absent_count' => 2, 'status' => 'PENDING']);
-        $this->assertDatabaseHas('dedosan_candidates', ['activity_id' => $id, 'household_id' => $this->kk['A'], 'absent_count' => 1, 'suggested_krama_id' => $this->p['Ketut']]);
+        // Dedosan hanya dikenakan ke kepala keluarga: yang disarankan selalu kepala keluarga (Made), bukan Ketut yang absen.
+        $this->assertDatabaseHas('dedosan_candidates', ['activity_id' => $id, 'household_id' => $this->kk['A'], 'absent_count' => 1, 'suggested_krama_id' => $this->p['Made']]);
         $this->rejected(fn () => $this->activities->record($this->penyarikan, $id, $this->participant($id, 'Ketut'), ['status' => 'HADIR']), 409);
         $this->rejected(fn () => $this->activities->generate($this->admin, $id), 409);
         $this->rejected(fn () => $this->activities->configure($this->admin, $id, ['kind' => 'GENERAL', 'visibility' => 'PUBLIC', 'attendance_basis' => 'PERSON', 'allow_representative' => '1']), 409);
@@ -314,16 +315,16 @@ class ActivityTest extends TestCase
         $b = (int) DB::table('dedosan_candidates')->where('activity_id', $id)->where('household_id', $this->kk['B'])->value('id');
         // A batch with one invalid decision rejects the whole batch: nothing partially applies.
         $this->invalid(fn () => $candidates->decideBulk($this->kesinoman, $id, ['decisions' => [
-            ['candidate_id' => $a, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']],
-            ['candidate_id' => $b, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']], // Made is not in household B
+            ['candidate_id' => $a, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']],
+            ['candidate_id' => $b, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']], // Made is not the head of household B
         ]]), 'decisions');
         $this->assertDatabaseHas('dedosan_candidates', ['id' => $a, 'status' => 'PENDING']);
         $this->assertDatabaseHas('dedosan_candidates', ['id' => $b, 'status' => 'PENDING']);
         $candidates->decideBulk($this->kesinoman, $id, ['decisions' => [
-            ['candidate_id' => $a, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']],
+            ['candidate_id' => $a, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']],
             ['candidate_id' => $b, 'decision' => 'SELECT', 'responsible_krama_id' => $this->p['Wayan'], 'note' => 'Wakil KK'],
         ]]);
-        $this->assertDatabaseHas('dedosan_candidates', ['id' => $a, 'status' => 'SELECTED', 'responsible_krama_id' => $this->p['Ketut']]);
+        $this->assertDatabaseHas('dedosan_candidates', ['id' => $a, 'status' => 'SELECTED', 'responsible_krama_id' => $this->p['Made']]);
         $this->assertDatabaseHas('dedosan_candidates', ['id' => $b, 'status' => 'SELECTED', 'responsible_krama_id' => $this->p['Wayan']]);
     }
 
@@ -339,12 +340,13 @@ class ActivityTest extends TestCase
         $candidates = app(DedosanCandidateManager::class);
         $a = (int) DB::table('dedosan_candidates')->where('activity_id', $id)->where('household_id', $this->kk['A'])->value('id');
         $b = (int) DB::table('dedosan_candidates')->where('activity_id', $id)->where('household_id', $this->kk['B'])->value('id');
-        $this->rejected(fn () => $candidates->decide($this->kelian, $id, $a, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']]), 403);
+        $this->rejected(fn () => $candidates->decide($this->kelian, $id, $a, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']]), 403);
         // Kesinoman memutuskan calon dedosan dan menetapkan event (Master Prompt §29/§48); Petengen tidak lagi berwenang.
-        $this->rejected(fn () => $candidates->decide($this->petengen, $id, $a, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']]), 403);
+        $this->rejected(fn () => $candidates->decide($this->petengen, $id, $a, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']]), 403);
         $this->invalid(fn () => $candidates->decide($this->kesinoman, $id, $b, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']]), 'responsible_krama_id');
         $this->invalid(fn () => $candidates->decide($this->kesinoman, $id, $a, ['decision' => 'DISMISS']), 'note');
-        $candidates->decide($this->kesinoman, $id, $a, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Ketut']]);
+        // Dedosan hanya dikenakan ke kepala keluarga: Made adalah kepala keluarga KK A.
+        $candidates->decide($this->kesinoman, $id, $a, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Made']]);
         $type = (int) DB::table('billing_types')->where('banjar_id', $this->tenant)->where('kind', 'DEDOSAN')->value('id');
         $this->invalid(fn () => $candidates->createEvent($this->kesinoman, $id, ['billing_type_id' => $type]), 'billing_type_id');
         $candidates->decide($this->kesinoman, $id, $b, ['decision' => 'SELECT', 'responsible_krama_id' => $this->p['Wayan'], 'note' => 'Wakil KK']);
@@ -357,7 +359,7 @@ class ActivityTest extends TestCase
         // Phase 5 review and issue apply unchanged.
         app(FinanceManager::class)->review($this->kelian, $event, ['action' => 'approve', 'review_note' => 'Sesuai presensi terverifikasi']);
         app(FinanceManager::class)->issue($this->kesinoman, $event);
-        $this->assertSame([$this->p['Ketut'], $this->p['Wayan']], DB::table('bills')->where('billing_event_id', $event)->orderBy('subject_krama_id')->pluck('subject_krama_id')->map(fn ($v) => (int) $v)->all());
+        $this->assertSame([$this->p['Made'], $this->p['Wayan']], DB::table('bills')->where('billing_event_id', $event)->orderBy('subject_krama_id')->pluck('subject_krama_id')->map(fn ($v) => (int) $v)->all());
     }
 
     public function test_minutes_decisions_attachments_finalize_and_pages(): void

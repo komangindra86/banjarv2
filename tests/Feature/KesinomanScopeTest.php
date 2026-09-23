@@ -70,6 +70,9 @@ class KesinomanScopeTest extends TestCase
         $this->personInA = $krama->person($this->admin, null, ['household_id' => $this->householdInA, 'name' => 'Made di Unit A', 'status' => 'ACTIVE']);
         $this->personSiblingInA = $krama->person($this->admin, null, ['household_id' => $this->householdInA, 'name' => 'Nyoman di Unit A', 'status' => 'ACTIVE']);
         $this->personInB = $krama->person($this->admin, null, ['household_id' => $this->householdInB, 'name' => 'Wayan di Unit B', 'status' => 'ACTIVE']);
+        // Dedosan/iuran hanya dikenakan ke kepala keluarga.
+        DB::table('households')->where('id', $this->householdInA)->update(['head_krama_id' => $this->personInA]);
+        DB::table('households')->where('id', $this->householdInB)->update(['head_krama_id' => $this->personInB]);
         $this->finance = app(FinanceManager::class);
     }
 
@@ -107,7 +110,7 @@ class KesinomanScopeTest extends TestCase
     {
         $scoped = $this->role('KESINOMAN', $this->unitA);
         $type = $this->finance->billingType($scoped, ['name' => 'Iuran Unit A', 'kind' => 'IURAN', 'default_amount' => '25000']);
-        $event = $this->finance->event($scoped, ['billing_type_id' => $type, 'title' => 'Iuran September', 'reference' => (string) Str::uuid()]);
+        $event = $this->finance->event($scoped, ['billing_type_id' => $type, 'title' => 'Iuran September', 'reference' => (string) Str::uuid(), 'event_date' => now('Asia/Makassar')->toDateString()]);
         $row = DB::table('billing_events')->find($event);
         $this->assertSame(1, $row->target_kk_count);
         $this->finance->issue($scoped, $event);
@@ -118,7 +121,7 @@ class KesinomanScopeTest extends TestCase
     {
         $scoped = $this->role('KESINOMAN', $this->unitA);
         $type = $this->finance->billingType($scoped, ['name' => 'Iuran Terbatas', 'kind' => 'IURAN', 'default_amount' => '25000']);
-        $this->invalid(fn () => $this->finance->event($scoped, ['billing_type_id' => $type, 'title' => 'Coba unit lain', 'reference' => (string) Str::uuid(), 'target' => 'UNIT', 'unit_id' => $this->unitB]));
+        $this->invalid(fn () => $this->finance->event($scoped, ['billing_type_id' => $type, 'title' => 'Coba unit lain', 'reference' => (string) Str::uuid(), 'event_date' => now('Asia/Makassar')->toDateString(), 'target' => 'UNIT', 'unit_id' => $this->unitB]));
         $this->assertDatabaseCount('billing_events', 0);
     }
 
@@ -126,7 +129,7 @@ class KesinomanScopeTest extends TestCase
     {
         $scoped = $this->role('KESINOMAN', $this->unitA);
         $type = $this->finance->billingType($scoped, ['name' => 'Dedosan Unit A', 'kind' => 'DEDOSAN', 'default_amount' => '50000']);
-        $event = $this->finance->event($scoped, ['billing_type_id' => $type, 'title' => 'Dedosan campuran', 'reference' => (string) Str::uuid()]);
+        $event = $this->finance->event($scoped, ['billing_type_id' => $type, 'title' => 'Dedosan campuran', 'reference' => (string) Str::uuid(), 'event_date' => now('Asia/Makassar')->toDateString()]);
         $this->invalid(fn () => $this->finance->bulkSubjects($scoped, $event, ['krama_ids' => [$this->personInA, $this->personInB], 'reason' => 'Campuran unit dalam satu batch']));
         $this->assertDatabaseCount('billing_event_subjects', 0);
     }
@@ -135,7 +138,7 @@ class KesinomanScopeTest extends TestCase
     {
         $kesinoman = $this->role('KESINOMAN');
         $type = $this->finance->billingType($kesinoman, ['name' => 'Dedosan Konflik', 'kind' => 'DEDOSAN', 'default_amount' => '50000']);
-        $event = $this->finance->event($kesinoman, ['billing_type_id' => $type, 'title' => 'Dedosan konflik satu KK', 'reference' => (string) Str::uuid()]);
+        $event = $this->finance->event($kesinoman, ['billing_type_id' => $type, 'title' => 'Dedosan konflik satu KK', 'reference' => (string) Str::uuid(), 'event_date' => now('Asia/Makassar')->toDateString()]);
         $this->invalid(fn () => $this->finance->bulkSubjects($kesinoman, $event, ['krama_ids' => [$this->personInA, $this->personSiblingInA, $this->personInB], 'reason' => 'Dua orang satu KK dalam satu batch']));
         $this->assertDatabaseCount('billing_event_subjects', 0);
     }
@@ -144,7 +147,7 @@ class KesinomanScopeTest extends TestCase
     {
         $kesinoman = $this->role('KESINOMAN');
         $type = $this->finance->billingType($kesinoman, ['name' => 'Dedosan Massal', 'kind' => 'DEDOSAN', 'default_amount' => '50000']);
-        $event = $this->finance->event($kesinoman, ['billing_type_id' => $type, 'title' => 'Dedosan massal', 'reference' => (string) Str::uuid()]);
+        $event = $this->finance->event($kesinoman, ['billing_type_id' => $type, 'title' => 'Dedosan massal', 'reference' => (string) Str::uuid(), 'event_date' => now('Asia/Makassar')->toDateString()]);
         $this->finance->bulkSubjects($kesinoman, $event, ['krama_ids' => [$this->personInA, $this->personInB], 'reason' => 'Tidak hadir tanpa keterangan']);
         $this->assertSame(2, DB::table('billing_event_subjects')->where('billing_event_id', $event)->count());
         $this->finance->review($this->kelian, $event, ['action' => 'approve', 'review_note' => 'Diperiksa bersama pengurus']);
@@ -156,10 +159,10 @@ class KesinomanScopeTest extends TestCase
     {
         $petengen = $this->role('PETENGEN');
         $type = $this->finance->billingType($this->role('KESINOMAN'), ['name' => 'Iuran Cek Petengen', 'kind' => 'IURAN', 'default_amount' => '25000']);
-        $this->forbidden(fn () => $this->finance->event($petengen, ['billing_type_id' => $type, 'title' => 'Coba oleh Petengen', 'reference' => (string) Str::uuid()]));
+        $this->forbidden(fn () => $this->finance->event($petengen, ['billing_type_id' => $type, 'title' => 'Coba oleh Petengen', 'reference' => (string) Str::uuid(), 'event_date' => now('Asia/Makassar')->toDateString()]));
         $dedosanType = $this->finance->billingType($this->role('KESINOMAN'), ['name' => 'Dedosan Cek Petengen', 'kind' => 'DEDOSAN', 'default_amount' => '50000']);
         $kesinoman = $this->role('KESINOMAN');
-        $event = $this->finance->event($kesinoman, ['billing_type_id' => $dedosanType, 'title' => 'Dedosan cek', 'reference' => (string) Str::uuid()]);
+        $event = $this->finance->event($kesinoman, ['billing_type_id' => $dedosanType, 'title' => 'Dedosan cek', 'reference' => (string) Str::uuid(), 'event_date' => now('Asia/Makassar')->toDateString()]);
         $this->forbidden(fn () => $this->finance->bulkSubjects($petengen, $event, ['krama_ids' => [$this->personInA], 'reason' => 'Petengen mencoba menetapkan']));
         $this->forbidden(fn () => $this->finance->subject($petengen, $event, ['subject_krama_id' => $this->personInA, 'reason' => 'Petengen mencoba menetapkan satu-satu']));
     }

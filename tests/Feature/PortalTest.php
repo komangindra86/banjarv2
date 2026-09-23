@@ -144,7 +144,7 @@ class PortalTest extends TestCase
         $this->context($other);
         $otherHousehold = DB::table('households')->insertGetId(['banjar_id' => $other, 'code' => 'KK-OTHER', 'status' => 'ACTIVE', 'created_at' => now(), 'updated_at' => now()]);
         $otherEvent = DB::table('billing_types')->insertGetId(['banjar_id' => $other, 'name' => 'Iuran', 'kind' => 'IURAN', 'default_amount' => 999999, 'is_active' => true, 'created_at' => now(), 'updated_at' => now()]);
-        $otherBillingEvent = DB::table('billing_events')->insertGetId(['banjar_id' => $other, 'billing_type_id' => $otherEvent, 'kind' => 'IURAN', 'amount' => 999999, 'title' => 'Event lain', 'reference' => 'REF-OTHER', 'target' => 'ALL_ACTIVE', 'status' => 'ISSUED', 'requires_approval' => false, 'created_by' => $super->id, 'created_at' => now(), 'updated_at' => now(), 'issued_at' => now()]);
+        $otherBillingEvent = DB::table('billing_events')->insertGetId(['banjar_id' => $other, 'billing_type_id' => $otherEvent, 'kind' => 'IURAN', 'amount' => 999999, 'title' => 'Event lain', 'reference' => 'REF-OTHER', 'event_date' => now()->toDateString(), 'target' => 'ALL_ACTIVE', 'status' => 'ISSUED', 'requires_approval' => false, 'created_by' => $super->id, 'created_at' => now(), 'updated_at' => now(), 'issued_at' => now()]);
         DB::table('bills')->insert(['banjar_id' => $other, 'billing_event_id' => $otherBillingEvent, 'kk_id' => $otherHousehold, 'household_code' => 'KK-OTHER', 'kind' => 'IURAN', 'gross_amount' => 999999, 'status' => 'UNPAID', 'created_at' => now(), 'updated_at' => now()]);
         $this->context();
 
