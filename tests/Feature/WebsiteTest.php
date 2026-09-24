@@ -75,6 +75,33 @@ class WebsiteTest extends TestCase
         return DB::table('media_files')->insertGetId(['banjar_id' => $tenant ?? $this->a, 'path' => $path, 'name' => 'Media uji', 'mime' => $mime, 'size' => 10, 'visibility' => $visibility, 'uploader_id' => $this->admin->id, 'created_at' => now(), 'updated_at' => now()]);
     }
 
+    public function test_upload_dialog_forms_are_separate_from_content_and_profile_forms(): void
+    {
+        $this->login();
+        foreach (['/admin/profile', '/admin/content/galeri/create'] as $path) {
+            $html = $this->get($this->host.$path)->assertOk()->getContent();
+            preg_match_all('/<\/?form\b[^>]*>/i', $html, $tags);
+            $depth = 0;
+            foreach ($tags[0] as $tag) {
+                $depth += str_starts_with(strtolower($tag), '</form') ? -1 : 1;
+                $this->assertContains($depth, [0, 1], 'Forms must never nest or close early on '.$path);
+            }
+            $this->assertSame(0, $depth);
+            $this->assertSame(2, substr_count($html, 'data-quick-add'));
+        }
+    }
+
+    public function test_quick_media_upload_returns_selection_data_and_validation_errors(): void
+    {
+        $this->login();
+        $response = $this->postJson($this->host.'/admin/media', [
+            'file' => UploadedFile::fake()->image('foto-banjar.png'), 'visibility' => 'PUBLIC',
+        ])->assertOk()->assertJsonStructure(['id', 'name', 'visibility', 'label'])->assertJsonPath('visibility', 'PUBLIC');
+        $this->assertDatabaseHas('media_files', ['id' => $response->json('id'), 'banjar_id' => $this->a]);
+        $this->postJson($this->host.'/admin/media', ['visibility' => 'PUBLIC'])
+            ->assertUnprocessable()->assertJsonStructure(['message']);
+    }
+
     public function test_public_pages_show_only_current_tenant_and_escape_content(): void
     {
         $this->content('pengumuman', ['title' => 'Kabar Alpha', 'body' => '<script>alert(1)</script>']);

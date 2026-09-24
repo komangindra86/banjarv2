@@ -180,8 +180,8 @@ if (cashDirection) {
 
 // "+ Tambah kategori" tanpa meninggalkan formulir transaksi (Master Prompt §26.3, §58.2): dialog di
 // halaman yang sama, form utama tidak pernah disentuh baik saat berhasil, batal, maupun gagal.
-document.querySelectorAll('[data-open-category-dialog]').forEach((btn) => {
-    btn.addEventListener('click', () => document.querySelector(btn.dataset.openCategoryDialog)?.showModal());
+document.querySelectorAll('[data-open-dialog]').forEach((btn) => {
+    btn.addEventListener('click', () => document.querySelector(btn.dataset.openDialog)?.showModal());
 });
 // Dialog generik: terbuka otomatis begitu halaman dimuat (mis. baru saja mengubah status krama jadi
 // Meninggal), dan tombol tutup generik yang tidak bergantung pada logika form tertentu.
@@ -190,7 +190,10 @@ document.querySelectorAll('select[data-auto-submit]').forEach((select) => select
 document.querySelectorAll('dialog [data-close-dialog]').forEach((btn) => {
     btn.addEventListener('click', () => btn.closest('dialog')?.close());
 });
-document.querySelectorAll('[data-quick-category]').forEach((form) => {
+// Formulir "tambah cepat" dalam dialog (kategori kas, unggah foto langsung dari form konten): submit via
+// fetch tanpa meninggalkan halaman, lalu hasilnya dipasang ke <select> (data-target-select) atau daftar
+// checkbox (data-target-checklist) tujuan — form utama tidak pernah disentuh baik berhasil maupun gagal.
+document.querySelectorAll('[data-quick-add]').forEach((form) => {
     const dialog = form.closest('dialog');
     const errorBox = form.querySelector('[data-quick-error]');
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
@@ -202,11 +205,18 @@ document.querySelectorAll('[data-quick-category]').forEach((form) => {
         try {
             const res = await fetch(form.action, { method: 'POST', headers: { 'X-CSRF-TOKEN': csrfToken, Accept: 'application/json' }, body: new FormData(form) });
             const json = await res.json();
-            if (!res.ok) { errorBox.textContent = json.message || 'Gagal menambah kategori.'; return; }
-            const select = document.querySelector(form.dataset.targetSelect);
-            if (select) {
-                const option = new Option(json.name, String(json.id), true, true);
-                select.add(option);
+            if (!res.ok) { errorBox.textContent = json.message || 'Gagal menyimpan.'; return; }
+            const label = json.label ?? json.name;
+            const select = form.dataset.targetSelect ? document.querySelector(form.dataset.targetSelect) : null;
+            if (select) select.add(new Option(label, String(json.id), true, true));
+            const checklist = form.dataset.targetChecklist ? document.querySelector(form.dataset.targetChecklist) : null;
+            if (checklist) {
+                checklist.querySelector('[data-checklist-empty]')?.remove();
+                const item = document.createElement('label');
+                item.className = 'check-option';
+                item.innerHTML = `<input type="checkbox" name="${checklist.dataset.checkboxName}" value="${json.id}" checked><span></span>`;
+                item.querySelector('span').textContent = label;
+                checklist.prepend(item);
             }
             dialog?.close();
             form.reset();

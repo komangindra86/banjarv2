@@ -419,9 +419,13 @@ final class FinanceManager
         if ($subjects->isEmpty()) {
             $this->fail('Tambahkan minimal satu individu dan alasan dedosan.');
         }
+        $people = $this->query->table('krama')->whereIn('id', $subjects->pluck('subject_krama_id'))->get()->keyBy('id');
+        $households = $this->query->table('households')->whereIn('id', $subjects->pluck('kk_id'))->get()->keyBy('id');
         foreach ($subjects as $subject) {
-            $person = $this->row('krama', $subject->subject_krama_id);
-            if ($person->status !== 'ACTIVE' || $person->household_id !== $subject->kk_id || $this->row('households', $subject->kk_id)->status !== 'ACTIVE') {
+            $person = $people->get($subject->subject_krama_id);
+            $household = $households->get($subject->kk_id);
+            abort_unless($person && $household, 404);
+            if ($person->status !== 'ACTIVE' || $person->household_id !== $subject->kk_id || $household->status !== 'ACTIVE') {
                 $this->fail('Data individu atau KK telah berubah. Batalkan event dan tinjau ulang.');
             }
         }

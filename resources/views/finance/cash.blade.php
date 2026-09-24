@@ -8,14 +8,14 @@
 <label>Kategori laporan
 <span class="flex flex-wrap items-center gap-3">
 <select name="category_id" id="cash-category"><option value="">Belum dikategorikan</option>@foreach($categories as $category)<option value="{{ $category->id }}" data-kind="{{ $category->kind }}" @selected((string)old('category_id') === (string)$category->id)>{{ $category->name }} ({{ $category->kind === 'IN' ? 'Pemasukan' : 'Pengeluaran' }})</option>@endforeach</select>
-<button type="button" class="button-quiet" data-open-category-dialog="#category-dialog">+ Tambah kategori</button>
+<button type="button" class="button-quiet" data-open-dialog="#category-dialog">+ Tambah kategori</button>
 </span>
 <span class="help">Contoh: "Biaya Melasti" untuk pengeluaran. Kategori berbeda dari kas/rekening dan jenis tagihan.</span>
 </label>
 <x-rupiah-input name="amount" :value="old('amount')" label="Nominal (Rp)" required />
 <label>Tanggal transaksi<input name="transaction_date" type="date" required max="{{ now('Asia/Makassar')->toDateString() }}" value="{{ old('transaction_date', now('Asia/Makassar')->toDateString()) }}"></label><label>Referensi bukti / kuitansi<input name="reference" maxlength="100" required value="{{ old('reference') }}"></label><label>Keterangan<textarea name="reason" maxlength="1000" minlength="5" required rows="3">{{ old('reason') }}</textarea></label><p class="help">Untuk pelunasan kewajiban, buka Tagihan dan pilih Catat pelunasan manual.</p><button class="button">Catat transaksi</button></form></details>@endif</div>
 
-<dialog id="category-dialog" class="card form-width"><h2>Tambah kategori</h2><form data-quick-category data-target-select="#cash-category" method="post" action="/admin/finance/categories/quick" class="form-stack mt-3">@csrf
+<dialog id="category-dialog" class="card form-width"><h2>Tambah kategori</h2><form data-quick-add data-target-select="#cash-category" method="post" action="/admin/finance/categories/quick" class="form-stack mt-3">@csrf
 <label>Nama kategori<input name="name" maxlength="100" required placeholder="Biaya Melasti"></label>
 <label>Jenis<select name="kind" id="quick-category-kind"><option value="IN">Pemasukan</option><option value="OUT">Pengeluaran</option></select></label>
 <p class="field-error" data-quick-error></p>

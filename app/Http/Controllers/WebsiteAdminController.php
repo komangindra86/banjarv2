@@ -8,6 +8,7 @@ use App\Modules\Website\PublicContent;
 use App\Platform\Tenancy\TenantQuery;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 final class WebsiteAdminController extends Controller
 {
@@ -71,7 +72,19 @@ final class WebsiteAdminController extends Controller
 
     public function upload(Request $request, MediaManager $media)
     {
-        $media->upload($request->user(), $request->all());
+        try {
+            $id = $media->upload($request->user(), $request->all());
+        } catch (ValidationException $e) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => collect($e->errors())->flatten()->first() ?? 'Gagal mengunggah berkas.'], 422);
+            }
+            throw $e;
+        }
+        if ($request->wantsJson()) {
+            $file = $this->query->table('media_files')->where('id', $id)->first();
+
+            return response()->json(['id' => $id, 'name' => $file->name, 'visibility' => $file->visibility, 'label' => $file->name.' · '.($file->visibility === 'PUBLIC' ? 'Publik' : 'Privat')]);
+        }
 
         return back()->with('success', 'Berkas diunggah. Pilih berkas ini pada formulir konten atau profil.');
     }

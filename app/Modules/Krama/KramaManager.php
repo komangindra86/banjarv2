@@ -59,8 +59,10 @@ final class KramaManager
         // A scoped operator may change only memberships in their own scope.
         $this->query->table($entity.'_unit_memberships')->where($entity.'_id', $id)
             ->when($scope !== null, fn ($q) => $q->whereIn('unit_id', $scope))->delete();
-        foreach ($ids as $unit) {
-            DB::table($entity.'_unit_memberships')->insertOrIgnore(['banjar_id' => $this->tenant->id(), $entity.'_id' => $id, 'unit_id' => $unit, 'created_at' => now(), 'updated_at' => now()]);
+        if ($ids) {
+            $now = now();
+            $rows = array_map(fn ($unit) => ['banjar_id' => $this->tenant->id(), $entity.'_id' => $id, 'unit_id' => $unit, 'created_at' => $now, 'updated_at' => $now], $ids);
+            DB::table($entity.'_unit_memberships')->insertOrIgnore($rows);
         }
     }
 

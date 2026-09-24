@@ -7,7 +7,7 @@
     <h2>{{ $row->name }} tercatat meninggal</h2>
     @if($patusTypes->isNotEmpty())
     <p class="muted mt-2">Buat draf tagihan patus untuk almarhum/ah ini — judul dan kode sudah terisi otomatis, langsung dikenakan ke semua KK.</p>
-    <button type="button" class="button mt-4" data-open-category-dialog="#patus-dialog">Tetapkan patus untuk {{ $row->name }} →</button>
+    <button type="button" class="button mt-4" data-open-dialog="#patus-dialog">Tetapkan patus untuk {{ $row->name }} →</button>
     <dialog id="patus-dialog" class="card form-width" @if(session('promptPatus')) data-auto-open @endif>
         <h2>Buat draf tagihan patus?</h2>
         <p class="muted mt-2">Akan dikenakan ke semua kepala keluarga atas nama <strong>{{ $row->name }}</strong>.</p>
