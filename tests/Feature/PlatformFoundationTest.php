@@ -173,7 +173,11 @@ class PlatformFoundationTest extends TestCase
         $this->get('http://alpha.localhost/admin')->assertRedirect('/login');
         $this->loginTenant();
         $this->get('http://alpha.localhost/admin')->assertOk()->assertSee('Admin alpha')->assertHeader('Cache-Control', 'max-age=0, no-store, private');
+        // Membuka /login saat masih masuk: tampil sebagai halaman tamu (tanpa navbar/Keluar), dengan info akun aktif.
+        $this->get('http://alpha.localhost/login')->assertOk()->assertDontSee('aria-label="Navigasi utama"', false)->assertDontSee('>Keluar</button>', false)
+            ->assertSee('Anda sedang masuk sebagai')->assertSee('Kembali ke dashboard');
         $this->post('http://alpha.localhost/logout')->assertRedirect('/login');
+        $this->get('http://alpha.localhost/login')->assertOk()->assertDontSee('Anda sedang masuk sebagai');
         $this->get('http://alpha.localhost/admin')->assertRedirect('/login');
         $this->assertDatabaseHas('audit_logs', ['banjar_id' => $this->a, 'action' => 'auth.logout', 'actor_id' => $this->admin->id]);
     }

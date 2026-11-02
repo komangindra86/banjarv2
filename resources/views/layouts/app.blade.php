@@ -15,7 +15,10 @@
     $access = app(\App\Platform\Identity\Access::class);
     $gate = app(\App\Platform\Modules\ModuleGate::class);
     $nav = [];
-    if ($signedUser) {
+    // Halaman login selalu tampil sebagai halaman tamu (tanpa navbar/Keluar) walau sesi lama masih aktif;
+    // kartu login sendiri yang memberi tahu akun yang sedang masuk.
+    $onLogin = request()->routeIs('login');
+    if ($signedUser && ! $onLogin) {
         if ($isPlatform) { $nav = [['/platform', 'Banjar'], ['/platform/payments', 'QRIS'], ['/platform/withdrawals', 'Pencairan'], ['/platform/audit', 'Audit']]; }
         else {
             $nav[] = ['/admin', 'Beranda'];
@@ -48,8 +51,8 @@
 @endphp
 <a href="#main" class="skip-link">Langsung ke isi</a>
 <header class="topbar"><div class="topbar-inner">
-    <a class="brand" href="{{ $signedUser ? ($isPlatform ? '/platform' : '/admin') : '/login' }}"><span class="brand-mark" aria-hidden="true">B</span><span>{{ $currentBanjar->name ?? 'Bali Santih' }}<small>{{ $isPlatform ? 'Pusat pengelolaan Banjar' : 'Banjar Digital' }}</small></span></a>
-    @if($signedUser)<form action="/logout" method="post">@csrf<button class="button-quiet" type="submit">Keluar</button></form>@else<span class="eyebrow hidden sm:block">DEKAT DENGAN BANJAR</span>@endif
+    <a class="brand" href="{{ $signedUser && ! $onLogin ? ($isPlatform ? '/platform' : '/admin') : '/login' }}"><span class="brand-mark" aria-hidden="true">B</span><span>{{ $currentBanjar->name ?? 'Bali Santih' }}<small>{{ $isPlatform ? 'Pusat pengelolaan Banjar' : 'Banjar Digital' }}</small></span></a>
+    @if($signedUser && ! $onLogin)<form action="/logout" method="post">@csrf<button class="button-quiet" type="submit">Keluar</button></form>@else<span class="eyebrow hidden sm:block">DEKAT DENGAN BANJAR</span>@endif
 </div></header>
 @if($nav)<nav class="navigation" aria-label="Navigasi utama"><div>@foreach($nav as [$url, $label])<a href="{{ $url }}" @if(request()->getPathInfo() === $url || ($url !== '/admin' && $url !== '/platform' && $url !== '/portal' && str_starts_with(request()->getPathInfo(), $url.'/')) || ($url === '/portal' && str_starts_with(request()->getPathInfo(), '/portal/') && ! request()->is('portal/beranda')) || ($url === '/admin/website' && request()->is('admin/content/*')) || ($url === '/admin/payments' && request()->is('admin/withdrawals', 'admin/withdrawals/*')) || ($url === '/admin/finance/events' && request()->is('admin/finance/*'))) aria-current="page" @endif><x-icon :name="str_starts_with($label, 'Notifikasi') ? 'bell' : match($label) { 'Konten' => 'news', 'Kegiatan' => 'calendar', 'Website' => 'settings', 'Audit' => 'history', 'Keuangan' => 'wallet', 'Aset' => 'box', 'Kegiatan saya' => 'calendar', 'Banjar' => 'profile', 'Pencairan', 'Dana QRIS' => 'wallet', default => 'home' }" /><span>{{ $label }}</span></a>@endforeach</div></nav>@endif
 <main id="main" class="page">
