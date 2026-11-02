@@ -15,6 +15,11 @@ Selalu berkomunikasi dalam **Bahasa Indonesia**.
 - Akun demo: `admin@`, `petengen@`, `kesinoman@`, `kelian@demo.test`. Kata sandi tidak dicatat; minta izin user sebelum mereset.
 - Data demo milik user sedang dipakai untuk belajar: jangan hapus/ubah tanpa izin; bersihkan data uji milik sendiri (batalkan event, kembalikan status).
 
+## Server & deploy
+- SSH: alias `balisantih` (VPS 72.62.120.163, kunci `~/.ssh/balisantih_deploy`). Prosedur lengkap: `docs/DEPLOYMENT.md`.
+- Banjar V2 = `banjar.balisantih.com` (Super Admin) dan `demobanjar.balisantih.com` (tenant). **`banjartesting`, `banjarbiaung`, `portal`, `puradalemwirasana` adalah aplikasi lama `/var/www/banjar-app`**, bukan V2 — jangan diubah dari proyek ini.
+- Rilis = folder `/var/www/banjarv2/releases/<commit>` dari `git archive` + `public/build` hasil build lokal; symlink `.env` & `storage` ke `shared/`; `vendor` disalin dari rilis aktif bila `composer.lock` sama (selain itu `composer install --no-dev`); `chmod -R go-w`; cache (`config/route/event/view:cache`) sebagai user `banjarv2`; backup DB bila ada migrasi; pindah `current` dengan `ln -sfn` + `mv -Tf`; `systemctl reload php8.3-fpm` dan `restart banjarv2-queue`. Di Git Bash pakai `tar --force-local`.
+
 ## Konvensi kode
 - Logika bisnis di `app/Modules/*/…Manager.php`; controller tipis. Tabel tenant diakses via `TenantQuery::table()`; izin via `Access` / `FinanceAccess` (`authorize`, `authorizeAny`).
 - Blade: beri spasi di antara directive berurutan (`@endif @if`, bukan `@endif@if` — tidak ter-compile). Checkbox wajib memakai `.check-option`. Daftar panjang = tabel `.table-scroll` + `.data-table`.
