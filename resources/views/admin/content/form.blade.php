@@ -9,7 +9,6 @@
 <div class="page-heading"><div><span class="eyebrow">{{ $definition['label'] }}</span><h1>{{ $item ? 'Edit informasi' : 'Informasi baru' }}</h1><p class="muted">Isian bertanda * wajib diisi. Semua waktu menggunakan WITA.</p></div></div>
 <form action="/admin/content/{{ $type }}{{ $item ? '/'.$item->id : '' }}" method="post" class="card form-stack form-width" data-saving>@csrf @if($item) @method('PATCH') @endif
 <x-editor-field name="title" :label="$type === 'pengurus' ? 'Nama pengurus' : 'Judul'" :value="$item->title ?? null" required />
-<x-editor-field name="slug" label="Alamat singkat" :value="$item->slug ?? null" help="Boleh dikosongkan saat membuat konten; otomatis mengikuti judul. Mengubah alamat memengaruhi tautan yang sudah dibagikan." />
 @if($type === 'pengurus')
 <x-editor-field name="position" label="Jabatan" :value="$item->position ?? null" required />
 <x-editor-field name="sort_order" label="Urutan tampil" type="number" :value="$item->sort_order ?? 0" required />

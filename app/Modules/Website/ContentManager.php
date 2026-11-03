@@ -69,10 +69,10 @@ final class ContentManager
         if ($id) {
             abort_unless($this->query->table($definition['table'])->where('id', $id)->exists(), 404);
         }
-        $input['slug'] = ($input['slug'] ?? null) ?: Str::slug(is_string($input['title'] ?? null) ? $input['title'] : '');
+        // §58: alamat halaman tidak diisi pengurus; dibuat otomatis dari judul saat konten dibuat (lihat slug()).
+        unset($input['slug']);
         $rules = [
             'title' => ['required', 'string', 'max:180'],
-            'slug' => ['bail', 'required', 'string', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', Rule::unique($definition['table'])->where('banjar_id', $this->tenant->id())->ignore($id)],
             'body' => ['nullable', 'string', 'max:50000'],
             'status' => ['required', Rule::in(['DRAFT', 'PUBLISHED', 'ARCHIVED'])],
             'published_at' => ['nullable', 'date'],
@@ -95,7 +95,7 @@ final class ContentManager
         }
         // A blank publication date means publish now; timezone matches form labels (WITA).
         $input['published_at'] = ($input['published_at'] ?? null) ?: now()->timezone('Asia/Makassar')->toDateTimeString();
-        $data = Validator::make($input, $rules, [], ['slug' => 'Alamat singkat'])->validate();
+        $data = Validator::make($input, $rules)->validate();
         $gallery = $data['gallery_media'] ?? [];
         unset($data['gallery_media']);
         foreach (['published_at', 'expires_at', 'starts_at', 'ends_at'] as $date) {
@@ -110,6 +110,7 @@ final class ContentManager
             if ($id) {
                 $this->query->table($definition['table'])->where('id', $id)->update($data + ['updated_at' => now()]);
             } else {
+                $data['slug'] = $this->slug($definition['table'], $data['title'], $type);
                 $id = DB::table($definition['table'])->insertGetId($data + ['banjar_id' => $this->tenant->id(), 'created_at' => now(), 'updated_at' => now()]);
             }
             if ($type === 'galeri') {
@@ -122,6 +123,19 @@ final class ContentManager
 
             return $id;
         });
+    }
+
+    // Alamat dari judul ("Sangkep Rutin" → sangkep-rutin), diberi nomor bila kembar. Tidak ikut berubah saat judul
+    // diedit supaya tautan yang sudah dibagikan ke WhatsApp tetap berfungsi.
+    private function slug(string $table, string $title, string $fallback): string
+    {
+        $base = rtrim(Str::limit(Str::slug($title), 170, ''), '-') ?: $fallback;
+        $slug = $base;
+        for ($n = 2; $this->query->table($table)->where('slug', $slug)->exists(); $n++) {
+            $slug = $base.'-'.$n;
+        }
+
+        return $slug;
     }
 
     public function delete(User $actor, string $type, int $id): void

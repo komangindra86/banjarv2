@@ -340,12 +340,21 @@ class WebsiteTest extends TestCase
         $this->get($this->host.'/admin/qr')->assertOk()->assertSee('data-url="http://alpha.localhost:18915"', false);
     }
 
-    public function test_slug_uniqueness_and_wita_scheduling_validation(): void
+    public function test_automatic_page_address_and_wita_scheduling_validation(): void
     {
         $this->content('berita');
         $this->login();
         $this->post($this->host.'/admin/content/berita', ['title' => ['invalid'], 'status' => 'DRAFT'])->assertSessionHasErrors('title');
-        $this->post($this->host.'/admin/content/berita', ['title' => 'Duplicate', 'slug' => 'informasi-berita', 'status' => 'DRAFT'])->assertSessionHasErrors('slug');
+        // Alamat halaman otomatis dari judul: tanpa kolom isian, judul kembar diberi nomor, tidak berubah saat judul diedit.
+        $this->get($this->host.'/admin/content/berita/create')->assertOk()->assertDontSee('Alamat singkat')->assertDontSee('name="slug"', false);
+        $this->post($this->host.'/admin/content/berita', ['title' => 'Informasi Berita', 'slug' => 'abaikan-saya', 'status' => 'PUBLISHED'])->assertRedirect()->assertSessionHasNoErrors();
+        $this->post($this->host.'/admin/content/berita', ['title' => 'Informasi Berita', 'status' => 'PUBLISHED'])->assertSessionHasNoErrors();
+        $this->post($this->host.'/admin/content/berita', ['title' => 'ᬲᬗ᭄ᬓᭂᬧ᭄', 'status' => 'PUBLISHED'])->assertSessionHasNoErrors();
+        $this->assertSame(['informasi-berita', 'informasi-berita-2', 'informasi-berita-3', 'berita'], DB::table('news_posts')->where('banjar_id', $this->a)->orderBy('id')->pluck('slug')->all());
+        $second = DB::table('news_posts')->where('slug', 'informasi-berita-2')->value('id');
+        $this->patch($this->host.'/admin/content/berita/'.$second, ['title' => 'Judul Diganti', 'slug' => 'baru', 'status' => 'PUBLISHED'])->assertSessionHasNoErrors();
+        $this->assertSame('informasi-berita-2', DB::table('news_posts')->where('id', $second)->value('slug'));
+        $this->get($this->host.'/berita/informasi-berita-2')->assertOk()->assertSee('Judul Diganti');
         $this->post($this->host.'/admin/content/agenda', ['title' => 'Invalid times', 'status' => 'DRAFT', 'starts_at' => '2026-10-01T19:00', 'ends_at' => '2026-10-01T18:00'])->assertSessionHasErrors('ends_at');
         $this->post($this->host.'/admin/content/pengumuman', ['title' => 'Invalid expiry', 'status' => 'PUBLISHED', 'priority' => 'NORMAL', 'published_at' => '2026-10-01T19:00', 'expires_at' => '2026-10-01T18:00'])->assertSessionHasErrors('expires_at');
         $this->post($this->host.'/admin/content/agenda', ['title' => 'Paruman', 'status' => 'PUBLISHED', 'starts_at' => '2026-10-01T19:00', 'published_at' => '2026-09-15T08:00'])->assertRedirect()->assertSessionHasNoErrors();
