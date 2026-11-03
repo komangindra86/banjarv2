@@ -226,6 +226,42 @@ class WebsiteTest extends TestCase
         $this->get($this->host.'/admin/website')->assertOk()->assertSee('<span class="brand-mark"', false);
     }
 
+    public function test_logo_becomes_share_preview_and_app_icons(): void
+    {
+        // Logo asli (WebP transparan, tidak persegi) → JPEG 1200×630 untuk WhatsApp dan PNG persegi untuk ikon aplikasi.
+        $image = imagecreatetruecolor(300, 200);
+        imagesavealpha($image, true);
+        imagefill($image, 0, 0, imagecolorallocatealpha($image, 0, 0, 0, 127));
+        imagefilledellipse($image, 150, 100, 180, 180, imagecolorallocate($image, 185, 71, 21));
+        ob_start();
+        imagewebp($image);
+        $path = 'banjars/'.$this->a.'/media/logo.webp';
+        Storage::disk('local')->put($path, ob_get_clean());
+        $logo = DB::table('media_files')->insertGetId(['banjar_id' => $this->a, 'path' => $path, 'name' => 'Logo', 'mime' => 'image/webp', 'size' => 10, 'visibility' => 'PUBLIC', 'uploader_id' => $this->admin->id, 'created_at' => now(), 'updated_at' => now()]);
+        $this->login();
+        $this->patch($this->host.'/admin/profile', ['logo_id' => $logo])->assertSessionHasNoErrors();
+
+        $brand = '/brand/'.$this->a.'/';
+        $this->get($this->host.'/berita')->assertOk()->assertSee($brand.'share.jpg?v='.$logo, false)->assertSee('<meta property="og:image:width" content="1200">', false)
+            ->assertSee('<link rel="apple-touch-icon" href="'.$brand.'apple-180.png?v='.$logo.'"', false);
+        $this->get($this->host.'/admin')->assertOk()->assertSee('<link rel="icon" href="'.$brand.'icon-192.png?v='.$logo.'"', false);
+        $this->assertSame([$brand.'icon-192.png?v='.$logo, $brand.'icon-512.png?v='.$logo, $brand.'maskable-512.png?v='.$logo], array_column($this->get($this->host.'/manifest.webmanifest')->json('icons'), 'src'));
+
+        foreach (['share.jpg' => [1200, 630, 'image/jpeg'], 'icon-512.png' => [512, 512, 'image/png'], 'maskable-512.png' => [512, 512, 'image/png'], 'apple-180.png' => [180, 180, 'image/png']] as $file => [$w, $h, $mime]) {
+            $response = $this->get($this->host.$brand.$file)->assertOk()->assertHeader('Content-Type', $mime);
+            $size = getimagesize($response->baseResponse->getFile()->getPathname());
+            $this->assertSame([$w, $h, $mime], [$size[0], $size[1], $size['mime']]);
+        }
+        $this->get($this->host.$brand.'share.png')->assertNotFound();
+        $this->get($this->host.$brand.'lain-1.png')->assertNotFound();
+        $this->get('http://beta.localhost'.$brand.'icon-192.png')->assertNotFound();
+
+        // Logo dijadikan privat → kembali ke ikon bawaan.
+        DB::table('media_files')->where('id', $logo)->update(['visibility' => 'PRIVATE']);
+        $this->get($this->host.$brand.'icon-192.png')->assertNotFound();
+        $this->get($this->host.'/manifest.webmanifest')->assertJsonPath('icons.0.src', '/icons/icon-192.png');
+    }
+
     public function test_five_balinese_templates_and_profile_sentence_templates(): void
     {
         $this->login();

@@ -7,6 +7,7 @@ use App\Platform\Tenancy\CurrentBanjar;
 use App\Platform\Tenants\TenantManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\FinanceFixture;
 use Tests\TestCase;
@@ -191,6 +192,30 @@ class CentralPortalTest extends TestCase
 
     public function test_manifest_on_portal_is_generic(): void
     {
-        $this->get($this->portal.'/manifest.webmanifest')->assertOk()->assertJson(['short_name' => 'Portal Krama', 'start_url' => '/portal/beranda']);
+        $this->get($this->portal.'/manifest.webmanifest')->assertOk()->assertJson(['short_name' => 'Portal Krama', 'start_url' => '/portal/beranda'])
+            ->assertJsonPath('icons.0.src', '/icons/icon-192.png');
+    }
+
+    public function test_installed_portal_uses_logo_of_warga_banjar(): void
+    {
+        Storage::fake('local');
+        $image = imagecreatetruecolor(64, 64);
+        ob_start();
+        imagewebp($image);
+        $path = 'banjars/'.$this->tenant.'/media/logo-portal.webp';
+        Storage::disk('local')->put($path, ob_get_clean());
+        $logo = DB::table('media_files')->insertGetId(['banjar_id' => $this->tenant, 'path' => $path, 'name' => 'Logo', 'mime' => 'image/webp', 'size' => 10, 'visibility' => 'PUBLIC', 'uploader_id' => $this->krama->id, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('website_profiles')->updateOrInsert(['banjar_id' => $this->tenant], ['logo_id' => $logo]);
+
+        $this->login();
+        $icon = '/brand/'.$this->tenant.'/icon-192.png?v='.$logo;
+        $this->get($this->portal.'/manifest.webmanifest')->assertJsonPath('name', 'Portal Krama · Banjar Uji Keuangan')->assertJsonPath('icons.0.src', $icon);
+        $this->get($this->portal.'/portal/beranda')->assertOk()->assertSee('<link rel="apple-touch-icon" href="/brand/'.$this->tenant.'/apple-180.png?v='.$logo.'"', false);
+
+        // Peramban mengambil ikon tanpa cookie; ikon hanya untuk Banjar yang Portal Krama-nya aktif.
+        $this->post($this->portal.'/logout');
+        $this->get($this->portal.'/brand/'.$this->tenant.'/icon-192.png')->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->module($this->tenant, 'PORTAL', 'INACTIVE');
+        $this->get($this->portal.'/brand/'.$this->tenant.'/icon-192.png')->assertNotFound();
     }
 }

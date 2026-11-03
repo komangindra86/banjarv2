@@ -565,6 +565,8 @@ Memilih template di Pengaturan website ikut mengisi warna aksen yang serasi; war
 
 Logo Banjar (Profil website, media berstatus Publik) menggantikan tanda huruf "B" di **semua** tempat: website publik, bilah atas halaman pengurus, login, portal warga (Banjar terpilih), dan ikon tab/favicon. Tanpa logo publik, tanda huruf tetap dipakai.
 
+Logo yang sama dipakai saat tautan dibagikan dan saat aplikasi dipasang: pratinjau WhatsApp/Facebook (`og:image`) memakai logo Banjar dalam JPEG 1200×630, untuk semua halaman website publik termasuk berita yang berfoto; ikon aplikasi (manifest PWA, ikon layar utama iOS, favicon) memakai PNG persegi 192/512/180 plus varian maskable. Berkas dibuat otomatis dari logo (tepi kosong dipotong, latar putih) dan disimpan per media logo; mengganti logo = berkas baru. Di portal pusat, aplikasi yang dipasang setelah warga masuk memakai nama dan logo Banjar warga tersebut; sebelum masuk, identitasnya umum (Portal Krama · Bali Santih).
+
 Profil website menyediakan tombol **Pakai contoh kalimat** untuk Kalimat pembuka, Tentang Banjar, dan Sejarah (`ContentManager::profileTemplates`); teks dalam [kurung] wajib diganti pengurus.
 
 Lokasi Banjar cukup **satu tautan Google Maps** (`website_profiles.maps_url`; hanya https dari maps.app.goo.gl, goo.gl/maps, google.<tld>/maps, maps.google.<tld>), bukan lintang/bujur. Koordinat lama otomatis dijadikan tautan.

@@ -10,8 +10,16 @@
         $banjarLogo = ! request()->attributes->get('platform') && $currentBanjar
             ? app(\App\Modules\Website\PublicContent::class)->image(app(\App\Platform\Tenancy\TenantQuery::class)->table('website_profiles')->value('logo_id'))
             : null;
+        // Ikon PNG dari logo (logo asli WebP tidak dipakai iOS saat aplikasi dipasang).
+        $brandIcon = $banjarLogo ? app(\App\Modules\Website\BrandIcon::class) : null;
+        $tabIcon = $brandIcon?->url('icon-192') ?? $banjarLogo ?? '/icons/icon-192.png';
+        $touchIcon = $brandIcon?->url('apple-180') ?? $banjarLogo ?? '/icons/icon-192.png';
     @endphp
-    <link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="{{ $banjarLogo ?? '/icons/icon-192.png' }}"><link rel="apple-touch-icon" href="{{ $banjarLogo ?? '/icons/icon-192.png' }}">
+    {{-- Pratinjau saat tautan login/portal dibagikan ke WhatsApp. --}}
+    <meta property="og:site_name" content="{{ $currentBanjar->name ?? (request()->attributes->get('portal') ? 'Portal Krama' : 'Bali Santih Digital') }}"><meta property="og:title" content="@yield('title', 'Beranda') · {{ $currentBanjar->name ?? 'Bali Santih Digital' }}">
+    <meta property="og:image" content="{{ url($brandIcon?->url('share') ?? '/icons/icon-512.png') }}">
+    {{-- use-credentials: di portal pusat manifest bergantung pada sesi warga (nama & logo Banjar-nya). --}}
+    <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials"><link rel="icon" href="{{ $tabIcon }}"><link rel="apple-touch-icon" href="{{ $touchIcon }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="app-shell @yield('body_class')">

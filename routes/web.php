@@ -26,6 +26,7 @@ Route::get('/login', [AuthController::class, 'create'])->name('login');
 Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:login');
 Route::post('/logout', [AuthController::class, 'destroy']);
 Route::get('/manifest.webmanifest', [PwaController::class, 'manifest']);
+Route::get('/brand/{banjar}/{file}', [PwaController::class, 'icon'])->whereNumber('banjar')->where('file', '[a-z0-9-]+\.(png|jpg)');
 
 Route::post('/webhooks/midtrans', [PaymentController::class, 'webhook']);
 Route::middleware(['access:tenant', 'module:PAYMENT', 'module:FINANCE', 'module:KRAMA'])->group(function () {

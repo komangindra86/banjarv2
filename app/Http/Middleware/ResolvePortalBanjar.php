@@ -19,6 +19,8 @@ final class ResolvePortalBanjar
         '#^/akun/kata-sandi$#',
         // Logo Banjar terpilih untuk bilah atas portal (PublicWebsiteController::media tetap memeriksa visibilitas).
         '#^/media/\d+$#',
+        // Ikon aplikasi dari logo Banjar; Banjar-nya dari alamat karena peramban mengambil ikon tanpa cookie.
+        '#^/brand/\d+/[a-z0-9-]+\.(png|jpg)$#',
     ];
 
     // Halaman yang tidak memerlukan Banjar terpilih.
@@ -57,7 +59,7 @@ final class ResolvePortalBanjar
             } elseif ($id) {
                 $request->session()->forget(['portal_banjar_id', 'auth_context']);
             }
-            if (! $banjar && ! in_array($path, self::TENANTLESS, true)) {
+            if (! $banjar && ! in_array($path, self::TENANTLESS, true) && ! str_starts_with($path, '/brand/')) {
                 if ($user) {
                     return redirect('/pilih-banjar');
                 }

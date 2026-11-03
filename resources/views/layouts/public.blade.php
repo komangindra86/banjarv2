@@ -3,9 +3,16 @@
 <title>{{ $seoTitle }}{{ $seoTitle !== $currentBanjar->name ? ' · '.$currentBanjar->name : '' }}</title>
 <meta name="description" content="{{ $seoDescription }}"><meta name="theme-color" content="{{ $settings->accent_color }}">
 <link rel="canonical" href="{{ $canonical }}"><meta property="og:locale" content="id_ID"><meta property="og:type" content="{{ isset($item) ? 'article' : 'website' }}"><meta property="og:site_name" content="{{ $currentBanjar->name }}"><meta property="og:title" content="{{ $seoTitle }}"><meta property="og:description" content="{{ $seoDescription }}"><meta property="og:url" content="{{ $canonical }}">
-<meta property="og:image" content="{{ $baseUrl.($seoImage ?? '/icons/icon-512.png') }}"><meta name="twitter:card" content="summary_large_image">
-@php $siteLogo = $publicContent->image($profile->logo_id ?? null); @endphp
-<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="{{ $siteLogo ?? '/icons/icon-192.png' }}"><link rel="apple-touch-icon" href="{{ $siteLogo ?? '/icons/icon-192.png' }}">
+@php
+    // Pratinjau tautan (WhatsApp, Facebook) memakai logo Banjar dalam JPEG 1200×630; WebP tidak selalu tampil di WhatsApp.
+    $siteLogo = $publicContent->image($profile->logo_id ?? null);
+    $brandIcon = $siteLogo ? app(\App\Modules\Website\BrandIcon::class) : null;
+    $shareImage = $brandIcon?->url('share');
+@endphp
+<meta property="og:image" content="{{ $baseUrl.($shareImage ?? $seoImage ?? '/icons/icon-512.png') }}">
+@if ($shareImage)<meta property="og:image:alt" content="Logo {{ $currentBanjar->name }}"><meta property="og:image:type" content="image/jpeg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">@endif
+<meta name="twitter:card" content="summary_large_image">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="{{ $brandIcon?->url('icon-192') ?? $siteLogo ?? '/icons/icon-192.png' }}"><link rel="apple-touch-icon" href="{{ $brandIcon?->url('apple-180') ?? $siteLogo ?? '/icons/icon-192.png' }}">
 @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head><body class="public-site {{ $settings->template_code ?? 'template-01' }}" style="--banjar-accent: {{ $settings->accent_color }}">
 
