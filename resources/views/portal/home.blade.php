@@ -17,8 +17,20 @@
 @if($canActivity)
 <section class="card"><span class="eyebrow">KEGIATAN TERDEKAT</span>
 @if($activity)<h2 class="mt-3 break-words">{{ $activity->title }}</h2><p class="muted mt-2">{{ \Carbon\Carbon::parse($activity->starts_at)->timezone('Asia/Makassar')->translatedFormat('l, d M Y · H:i') }} WITA{{ $activity->location ? ' · '.$activity->location : '' }}</p>
-@else<h2 class="mt-3">Belum ada jadwal</h2><p class="muted mt-2">Kegiatan yang mencatat Anda atau KK Anda akan tampil di sini.</p>@endif
+@else<h2 class="mt-3">Belum ada jadwal</h2><p class="muted mt-2">Kegiatan Banjar yang akan datang akan tampil di sini.</p>@endif
 <a class="text-link mt-4" href="/aktivitas">Lihat semua kegiatan →</a></section>
+@endif
+
+@if($canFinance)
+<section class="card"><span class="eyebrow">RIWAYAT PEMBAYARAN</span>
+@if($lastPayment)<h2 class="mt-3">{{ \App\Modules\Finance\FinanceManager::money($lastPayment->amount) }}</h2><p class="muted mt-2 break-words">Terakhir: {{ $lastPayment->title }} · {{ $lastPayment->method === 'GATEWAY' ? 'QRIS' : 'Tunai' }} · {{ \Carbon\Carbon::parse($lastPayment->paid_at)->timezone('Asia/Makassar')->translatedFormat('d M Y') }}</p>
+@else<h2 class="mt-3">Belum ada</h2><p class="muted mt-2">Pembayaran tunai maupun QRIS akan tercatat di sini.</p>@endif
+<a class="text-link mt-4" href="/portal/riwayat-pembayaran">Lihat riwayat →</a></section>
+
+<section class="card"><span class="eyebrow">LAPORAN KEUANGAN</span>
+@if($report)<h2 class="mt-3 break-words">{{ $report->sangkep_title }}</h2><p class="muted mt-2">Saldo akhir {{ \App\Modules\Finance\FinanceManager::money(json_decode($report->computed_snapshot ?? '{}', true)['saldo_akhir'] ?? 0) }}</p>
+@else<h2 class="mt-3">Belum ada laporan</h2><p class="muted mt-2">Laporan kas sangkep akan tampil setelah difinalkan.</p>@endif
+<a class="text-link mt-4" href="/portal/laporan">Lihat laporan →</a></section>
 @endif
 
 @if($canLetter)

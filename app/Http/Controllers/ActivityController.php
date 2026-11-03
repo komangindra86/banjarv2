@@ -226,8 +226,15 @@ final class ActivityController extends Controller
                 ->where('a.status', '<>', 'ARCHIVED')->where('a.attendance_status', '<>', 'NONE')->where('a.starts_at', '>=', now()->subDays(30))
                 ->orderBy('a.starts_at')->limit(30)->get(['activity_participants.id as participant_id', 'activity_participants.status', 'activity_participants.source', 'activity_participants.note', 'activity_participants.basis', 'a.id', 'a.title', 'a.starts_at', 'a.ends_at', 'a.location', 'a.kind', 'a.attendance_status']);
         }
+        // §53: jadwal kegiatan Banjar yang sudah terbit mulai hari ini. Kegiatan INTERNAL (mis. paruman tertutup)
+        // hanya tampil bagi warga/KK yang menjadi pesertanya, sama seperti website publik yang menyembunyikannya.
+        $mine = $rows->pluck('id')->all();
+        $schedule = $this->query->table('activities')->where('status', 'PUBLISHED')->where('published_at', '<=', now())
+            ->where('starts_at', '>=', now('Asia/Makassar')->startOfDay()->utc())
+            ->where(fn ($q) => $q->where('visibility', 'PUBLIC')->orWhereIn('id', $mine))
+            ->orderBy('starts_at')->limit(30)->get(['id', 'title', 'body', 'starts_at', 'ends_at', 'location', 'kind']);
 
-        return view('activity.portal', compact('self', 'rows'));
+        return view('activity.portal', compact('self', 'rows', 'schedule', 'mine'));
     }
 
     public function excuse(Request $request, int $id)

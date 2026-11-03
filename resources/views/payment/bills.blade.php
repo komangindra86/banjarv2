@@ -2,7 +2,7 @@
 @section('title', 'Tagihan & QRIS')
 @section('content')
 @if(app(\App\Platform\Identity\Access::class)->tenant(auth()->user(), 'payment.self'))<a href="/portal/beranda" class="back-link">← Beranda</a>@endif
-<div class="page-heading"><div><span class="eyebrow">PEMBAYARAN BANJAR</span><h1>Tagihan & QRIS</h1><p class="muted">Bayar satu tagihan penuh dengan QRIS. Status diperiksa oleh sistem.</p></div></div>
+<div class="page-heading"><div><span class="eyebrow">PEMBAYARAN BANJAR</span><h1>Tagihan & QRIS</h1><p class="muted">Bayar satu tagihan penuh dengan QRIS. Status diperiksa oleh sistem.</p></div>@if(app(\App\Platform\Identity\Access::class)->tenant(auth()->user(), 'krama.self'))<a class="button-secondary" href="/portal/riwayat-pembayaran">Riwayat pembayaran</a>@endif</div>
 @if(!\App\Modules\Payment\PaymentManager::ready())<p class="notice">QRIS belum diaktifkan oleh Bali Santih.</p>@endif
 <div class="grid gap-4 md:grid-cols-2">
 @forelse($bills as $bill)

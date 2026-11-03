@@ -1,0 +1,139 @@
+/*
+ * Template website publik 02–05 (template 01 = public.css). Semuanya bernuansa Bali; masing-masing mengganti
+ * palet (variabel --p-*), motif ornamen (--p-lattice), huruf, dan beberapa bentuk komponen. Warna aksen tetap
+ * dari pengaturan Banjar (--banjar-accent), template hanya menyarankan warna yang serasi.
+ */
+
+/* ---------- 02 · Subak: hijau sawah berundak, emas padi, sudut membulat ---------- */
+.public-site.template-02 {
+    --p-ink: #1f2a1c;
+    --p-ink-soft: #33402e;
+    --p-paper: #f4f6ec;
+    --p-cream: #e5ecd5;
+    --p-sand: #d5dfbf;
+    --p-gold: #8a7232;
+    --p-gold-soft: #cdb877;
+    --p-line: #d8e0c6;
+    --p-muted: #5d6a56;
+    --p-night: #17251a;
+    --p-surface: #fbfcf6;
+    --p-tint: #f1f5e3;
+    --p-tint-ink: #4d5f2a;
+    --p-accent: var(--banjar-accent, #2f6b3a);
+    /* Undakan sawah: garis lengkung bertumpuk. */
+    --p-lattice: repeating-radial-gradient(ellipse 60px 14px at 50% 120%, transparent 0 6px, var(--p-gold-soft) 6px 7px);
+}
+.template-02 .hero { background: linear-gradient(180deg, var(--p-cream), var(--p-paper)); }
+.template-02 .hero::after { content: ''; position: absolute; inset: auto 0 0 0; height: 46%; z-index: -1; opacity: .5;
+    background: repeating-linear-gradient(172deg, transparent 0 26px, color-mix(in srgb, var(--p-accent) 14%, transparent) 26px 28px); }
+.template-02 .public-card.is-text, .template-02 .highlights, .template-02 .public-empty, .template-02 .contact-panel { border-radius: 18px; overflow: hidden; }
+.template-02 .card-media { border-radius: 16px; }
+.template-02 .public-card.is-text { border-top-width: 1px; border-left: 4px solid var(--p-accent); }
+.template-02 .site-mark { border-radius: 16px; background: var(--p-accent); color: #fff; }
+.template-02 .public-logo { border-radius: 16px; }
+.template-02 .eyebrow::before { width: 10px; height: 10px; border-radius: 50%; background: var(--p-gold-soft); }
+
+/* ---------- 03 · Poleng: kotak hitam-putih kain poleng, merah, huruf tegas ---------- */
+.public-site.template-03 {
+    --p-ink: #111111;
+    --p-ink-soft: #2a2a2a;
+    --p-paper: #fafaf8;
+    --p-cream: #efefec;
+    --p-sand: #e2e2de;
+    --p-gold: #9a7224;
+    --p-gold-soft: #d6b56b;
+    --p-line: #dcdcd8;
+    --p-muted: #5f5f5b;
+    --p-night: #0d0d0d;
+    --p-surface: #ffffff;
+    --p-tint: #f6f1e4;
+    --p-tint-ink: #6b4f12;
+    --p-accent: var(--banjar-accent, #a3201b);
+    --p-serif: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+    /* Kain poleng: kotak-kotak hitam-putih. */
+    --p-lattice: conic-gradient(#111 25%, #fff 0 50%, #111 0 75%, #fff 0) 0 0 / 10px 10px;
+}
+.template-03 .lattice { opacity: 1; }
+.template-03 h1, .template-03 h2, .template-03 h3, .template-03 .brand-name { font-weight: 700 !important; letter-spacing: -.03em; }
+.template-03 .hero { background: var(--p-night); color: #fff; }
+.template-03 .hero h1, .template-03 .hero-lead { color: #fff; }
+.template-03 .hero .eyebrow { color: var(--p-gold-soft); }
+.template-03 .hero h1 em { font-style: normal; color: var(--p-gold-soft); }
+.template-03 .hero .button-secondary { color: #fff; border-color: #fff; }
+.template-03 .hero .button-secondary:hover { background: #fff; color: var(--p-ink); }
+.template-03 .hero::before { background: radial-gradient(50% 70% at 90% 10%, color-mix(in srgb, var(--p-accent) 35%, transparent), transparent 70%); }
+.template-03 .button, .template-03 .button-secondary, .template-03 .badge { border-radius: 4px; }
+.template-03 .site-mark, .template-03 .public-logo { border-radius: 4px; }
+.template-03 .site-mark { background: var(--p-accent); color: #fff; box-shadow: 4px 4px 0 var(--p-ink); }
+.template-03 .public-card.is-text { border: 2px solid var(--p-ink); border-top: 6px solid var(--p-accent); }
+.template-03 .highlights { border: 2px solid var(--p-ink); box-shadow: 8px 8px 0 var(--p-ink); }
+.template-03 .public-nav a::after { height: 3px; bottom: 6px; }
+.template-03 .prose-text, .template-03 .hero-lead, .template-03 .contact-panel address { font-family: var(--p-sans); }
+
+/* ---------- 04 · Prada: merah marun, hiasan emas prada, tata letak simetris ---------- */
+.public-site.template-04 {
+    --p-ink: #2b1414;
+    --p-ink-soft: #452222;
+    --p-paper: #fbf5ec;
+    --p-cream: #f4e5d1;
+    --p-sand: #ead2b3;
+    --p-gold: #a97a22;
+    --p-gold-soft: #e0bd6e;
+    --p-line: #ead6bb;
+    --p-muted: #6f5547;
+    --p-night: #3a0f12;
+    --p-surface: #fffaf2;
+    --p-tint: #fbefd6;
+    --p-tint-ink: #7a4f0e;
+    --p-accent: var(--banjar-accent, #8c1c22);
+    /* Prada: belah ketupat emas rapat seperti kain berprada. */
+    --p-lattice: repeating-linear-gradient(45deg, transparent 0 4px, var(--p-gold-soft) 4px 5px), repeating-linear-gradient(-45deg, transparent 0 4px, var(--p-gold-soft) 4px 5px), linear-gradient(var(--p-night), var(--p-night));
+}
+.template-04 .public-strip { background: linear-gradient(90deg, var(--p-night), #5a1a1e, var(--p-night)); }
+.template-04 .hero-inner { justify-items: center; text-align: center; }
+.template-04 .hero-inner > div { margin-inline: auto; }
+.template-04 .hero .eyebrow::after { content: ''; width: 28px; height: 1px; background: currentColor; }
+.template-04 .hero-lead { margin-inline: auto; }
+.template-04 .hero-actions { justify-content: center; }
+.template-04 .hero.has-cover h1 { max-width: 18ch; margin-inline: auto; }
+.template-04 .hero::before { background: radial-gradient(70% 90% at 50% 0%, color-mix(in srgb, var(--p-gold-soft) 28%, transparent), transparent 70%); }
+.template-04 .section-head { flex-direction: column; align-items: center; text-align: center; border-bottom: 0; }
+.template-04 .section-head .eyebrow::after { content: ''; width: 28px; height: 1px; background: currentColor; }
+.template-04 .public-card.is-text { border: 1px solid var(--p-gold-soft); outline: 1px solid var(--p-gold-soft); outline-offset: -7px; border-top: 1px solid var(--p-gold-soft); }
+.template-04 .site-mark { background: var(--p-night); color: var(--p-gold-soft); box-shadow: 0 0 0 2px var(--p-gold-soft), 0 0 0 4px var(--p-paper), 0 0 0 5px var(--p-gold); }
+.template-04 .public-logo { box-shadow: 0 0 0 2px var(--p-gold-soft); }
+.template-04 .button { border-radius: 2px; letter-spacing: .08em; text-transform: uppercase; font-size: 12.5px; }
+.template-04 .button-secondary { border-radius: 2px; letter-spacing: .08em; text-transform: uppercase; font-size: 12.5px; border-color: var(--p-gold); }
+.template-04 .lattice { height: 12px; }
+
+/* ---------- 05 · Segara: biru laut, pasir pantai, ombak, lapang ---------- */
+.public-site.template-05 {
+    --p-ink: #10283a;
+    --p-ink-soft: #24435a;
+    --p-paper: #f6fafb;
+    --p-cream: #e3eff2;
+    --p-sand: #efe6d6;
+    --p-gold: #96743e;
+    --p-gold-soft: #d6c09a;
+    --p-line: #d6e3e8;
+    --p-muted: #52707f;
+    --p-night: #0c2233;
+    --p-surface: #ffffff;
+    --p-tint: #eef6f8;
+    --p-tint-ink: #1d5568;
+    --p-accent: var(--banjar-accent, #0f6e8c);
+    --p-serif: Georgia, 'Palatino Linotype', 'Book Antiqua', serif;
+    /* Ombak: lengkung berulang. */
+    --p-lattice: radial-gradient(circle at 10px -4px, transparent 9px, var(--p-gold-soft) 9px 10px, transparent 10px) 0 0 / 20px 10px;
+}
+.template-05 .hero { background: linear-gradient(180deg, var(--p-cream) 0%, var(--p-paper) 70%, var(--p-sand) 100%); }
+.template-05 .hero::before { background: radial-gradient(55% 75% at 80% 15%, color-mix(in srgb, var(--p-accent) 16%, transparent), transparent 70%); }
+.template-05 .public-header { background: color-mix(in srgb, #fff 88%, transparent); }
+.template-05 .public-strip { background: var(--p-accent); color: #e8f4f7; }
+.template-05 .public-strip span { color: #fff; }
+.template-05 .public-card.is-text, .template-05 .highlights, .template-05 .public-empty, .template-05 .contact-panel { border-radius: 24px; overflow: hidden; }
+.template-05 .card-media { border-radius: 22px; }
+.template-05 .public-card.is-text { border-top: 1px solid var(--p-line); box-shadow: 0 18px 40px -28px rgba(12, 34, 51, .45); }
+.template-05 .highlights { box-shadow: 0 30px 60px -36px rgba(12, 34, 51, .5); }
+.template-05 .site-mark { background: var(--p-accent); color: #fff; box-shadow: 0 0 0 3px var(--p-paper), 0 0 0 4px var(--p-accent); }
+.template-05 .contact-panel::before { border-radius: 16px; }

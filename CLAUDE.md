@@ -11,13 +11,14 @@ Selalu berkomunikasi dalam **Bahasa Indonesia**.
 - PHP di PATH adalah 7.4 — **jangan dipakai**. Gunakan `C:\laragon\bin\php\php-8.2.27-Win32-vs16-x64\php.exe` untuk `artisan` dan `vendor/bin/phpunit`.
 - Test: MySQL `banjarv2_testing` (RefreshDatabase). Jalankan seluruh suite sebelum menyatakan selesai.
 - Aset: tidak ada Vite dev server; setelah mengubah `resources/css` atau `resources/js`, jalankan `npm run build`.
-- Dev server: `.claude/launch.json` (port 18915). Tenant diakses lewat `http://demo.localhost:18915` (bukan `localhost` → 404). Platform: `admin.banjar.localhost`.
+- Dev server: `.claude/launch.json` (port 18915). Tenant diakses lewat `http://demo.localhost:18915` (bukan `localhost` → 404). Platform: `admin.banjar.localhost`. Portal krama pusat: `portal.banjar.localhost` (§53; Banjar dari sesi, bukan domain — middleware `ResolvePortalBanjar`). Akun warga demo: I Wayan Merta (login NIK uji `5171000000000001`) dan `nyoman@demo.test`; kata sandi akun lokal di `storage/app/private/demo-access.txt`.
 - Akun demo: `admin@`, `petengen@`, `kesinoman@`, `kelian@demo.test`. Kata sandi tidak dicatat; minta izin user sebelum mereset.
 - Data demo milik user sedang dipakai untuk belajar: jangan hapus/ubah tanpa izin; bersihkan data uji milik sendiri (batalkan event, kembalikan status).
 
 ## Server & deploy
 - SSH: alias `balisantih` (VPS 72.62.120.163, kunci `~/.ssh/balisantih_deploy`). Prosedur lengkap: `docs/DEPLOYMENT.md`.
-- Banjar V2 = `banjar.balisantih.com` (Super Admin) dan `demobanjar.balisantih.com` (tenant). **`banjartesting`, `banjarbiaung`, `portal`, `puradalemwirasana` adalah aplikasi lama `/var/www/banjar-app`**, bukan V2 — jangan diubah dari proyek ini.
+- Banjar V2 = `banjar.balisantih.com` (Super Admin), tenant `demobanjar.balisantih.com` dan `banjarbiaung.balisantih.com` (dialihkan dari aplikasi lama 2026-11-03; cadangan vhost lama di `/root/nginx-backups/`), serta portal krama pusat `portal.balisantih.com` (`PORTAL_HOST`). **`banjartesting`, `puradalemwirasana` (dan `portal` sebelum dialihkan ke V2) adalah aplikasi lama `/var/www/banjar-app`**, bukan V2 — jangan diubah dari proyek ini. `banjartegalgundul.balisantih.com` = aplikasi terpisah `/var/www/banjartegalgundul`.
+- Tidak ada DNS wildcard: tenant baru butuh record DNS + vhost nginx (pola `sites-available/demobanjar.balisantih.com`, pool `banjarv2.sock`) + sertifikat SSL.
 - Rilis = folder `/var/www/banjarv2/releases/<commit>` dari `git archive` + `public/build` hasil build lokal; symlink `.env` & `storage` ke `shared/`; `vendor` disalin dari rilis aktif bila `composer.lock` sama (selain itu `composer install --no-dev`); `chmod -R go-w`; cache (`config/route/event/view:cache`) sebagai user `banjarv2`; backup DB bila ada migrasi; pindah `current` dengan `ln -sfn` + `mv -Tf`; `systemctl reload php8.3-fpm` dan `restart banjarv2-queue`. Di Git Bash pakai `tar --force-local`.
 
 ## Konvensi kode
@@ -33,3 +34,4 @@ Selalu berkomunikasi dalam **Bahasa Indonesia**.
 - Status krama → Meninggal → dialog "Buat draf tagihan patus?".
 - Kesinoman menetapkan & menerbitkan (menu Keuangan → Event tagihan, tanpa `finance.view`); Kelian menyetujui dedosan; Petengen menekan **Lunas** (tunai) di daftar Tagihan.
 - QRIS hanya dari portal warga (`payment.self`); pengurus tidak punya `payment.create`.
+- Akun warga: Admin Banjar klik **Aktifkan akun warga** (butuh NIK) → login NIK + kata sandi awal `balisantih`, wajib diganti saat pertama masuk (`AccountManager`, §53).

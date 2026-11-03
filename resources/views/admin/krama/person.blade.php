@@ -32,6 +32,25 @@
     @endif
 </section>
 @endif
+@if($canAccount)
+<section class="card form-width mb-6">
+    <div class="section-label"><h2>Akun portal warga</h2>@if($portalAccount)<span class="badge">{{ $portalAccount->status === 'ACTIVE' ? 'Aktif' : 'Nonaktif' }}</span>@endif</div>
+    @if($portalAccount)
+    <p class="muted mt-2">@if($portalAccount->nik_hash)Login di portal dengan <strong>NIK</strong>.@else Login dengan email {{ $portalAccount->email }}.@endif @if($portalAccount->must_change_password) Masih memakai kata sandi awal — warga wajib menggantinya saat pertama masuk.@endif</p>
+    @if($canResetAccount)
+    <form method="post" action="/admin/krama/people/{{ $row->id }}/account/reset" class="mt-4" data-confirm="Kembalikan kata sandi {{ $row->name }} ke kata sandi awal &quot;{{ \App\Modules\Krama\AccountManager::DEFAULT_PASSWORD }}&quot;?">@csrf<button class="button-secondary" type="submit">Reset kata sandi ke awal</button></form>
+    @endif
+    @elseif($row->status !== 'ACTIVE')
+    <p class="muted mt-2">Akun hanya bisa diaktifkan untuk krama berstatus aktif.</p>
+    @elseif(!$row->nik)
+    <p class="muted mt-2">Isi NIK krama ini dulu (di bagian NIK di bawah) — NIK dipakai sebagai nama pengguna untuk login.</p>
+    @else
+    <p class="muted mt-2">Warga login di portal dengan NIK dan kata sandi awal <strong>{{ \App\Modules\Krama\AccountManager::DEFAULT_PASSWORD }}</strong>, lalu wajib menggantinya saat pertama masuk.</p>
+    <form method="post" action="/admin/krama/people/{{ $row->id }}/account" class="mt-4">@csrf<button class="button" type="submit">Aktifkan akun warga</button></form>
+    @endif
+    @error('account')<p class="field-error mt-3" role="alert">{{ $message }}</p>@enderror
+</section>
+@endif
 <section class="card form-width">
 @if($canEdit)<form class="form-stack" method="post" action="/admin/krama/people{{ $row ? '/'.$row->id : '' }}">@csrf @if($row) @method('PATCH') @endif<input type="hidden" name="version" value="{{ $row->version ?? 0 }}">
 <label>Nama lengkap<input name="name" required maxlength="150" autofocus value="{{ old('name', $row->name ?? '') }}"></label>
@@ -51,7 +70,7 @@
 <label>Tanggal lahir (opsional)<input type="date" name="birth_date" value="{{ old('birth_date', $row->birth_date ?? '') }}" max="{{ now()->format('Y-m-d') }}"></label><label>Telepon (opsional)<input name="phone" type="tel" maxlength="30" value="{{ old('phone', $row->phone ?? '') }}"></label>
 @include('admin.krama.unit-choices')
 <details><summary class="touch-link">NIK (opsional)</summary><p class="muted my-3">{{ \App\Modules\Krama\KramaManager::masked($row->nik ?? null) }}</p><label>Isi atau ganti NIK<input name="nik" inputmode="numeric" pattern="[0-9]{16}" maxlength="16" autocomplete="off"><span class="help">16 digit. Kosongkan untuk mempertahankan NIK yang tersimpan.</span></label><label class="check-option"><input type="checkbox" name="clear_nik" value="1"><span>Hapus NIK yang tersimpan</span></label></details>
-@if($access->tenant(auth()->user(), 'krama.configure'))<label>Akun untuk pengajuan mandiri<select name="user_id"><option value="">Belum terhubung</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected(old('user_id', $row->user_id ?? '') == $account->id)>{{ $account->name }} · {{ $account->email }}</option>@endforeach</select><span class="help">Akun dibuat melalui Akses pengurus oleh Super Admin dengan peran Krama.</span></label>@else<input type="hidden" name="user_id" value="{{ $row->user_id ?? '' }}">@endif
+@if($access->tenant(auth()->user(), 'krama.configure'))<label>Akun untuk pengajuan mandiri<select name="user_id"><option value="">Belum terhubung</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected(old('user_id', $row->user_id ?? '') == $account->id)>{{ $account->name }} · {{ $account->email ?? 'login dengan NIK' }}</option>@endforeach</select><span class="help">Akun dibuat melalui Akses pengurus oleh Super Admin dengan peran Krama.</span></label>@else<input type="hidden" name="user_id" value="{{ $row->user_id ?? '' }}">@endif
 <button class="button">Simpan krama</button></form>
 @else<dl class="form-stack"><div><dt>Status</dt><dd>{{ \App\Modules\Krama\KramaManager::STATUSES[$row->status] }}</dd></div><div><dt>Status hubungan keluarga</dt><dd>{{ $isHead ? 'Kepala Keluarga' : ($row->relationship ? \App\Modules\Krama\KramaManager::RELATIONSHIPS[$row->relationship] : 'Belum diisi') }}</dd></div><div><dt>NIK</dt><dd>{{ \App\Modules\Krama\KramaManager::masked($row->nik) }}</dd></div><div><dt>Tanggal lahir</dt><dd>{{ $row->birth_date ?: 'Belum diisi' }}</dd></div><div><dt>Telepon</dt><dd>{{ $row->phone ?: 'Belum diisi' }}</dd></div></dl>@endif
 </section>

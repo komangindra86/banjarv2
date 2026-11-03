@@ -271,7 +271,9 @@ class ActivityTest extends TestCase
         $this->activities->generate($this->admin, $other);
         $this->rejected(fn () => $this->activities->excuse($krama, $other, ['status' => 'IZIN', 'note' => 'Bukan peserta']), 404);
         $this->rejected(fn () => $this->activities->record($krama, $id, $this->participant($id, 'Wayan'), ['status' => 'HADIR']), 403);
-        $this->tenantLogin($krama)->get($this->host.'/aktivitas')->assertOk()->assertSee('Ngayah pura')->assertDontSee('Rapat lain');
+        // §53: jadwal menampilkan semua kegiatan terbit, tetapi izin/presensi hanya untuk slot milik sendiri.
+        $this->tenantLogin($krama)->get($this->host.'/aktivitas')->assertOk()->assertSee('Ngayah pura')->assertSee('Rapat lain')
+            ->assertDontSee('/aktivitas/'.$other.'/izin', false);
         $this->tenantLogin($krama)->get($this->host.'/admin/activities')->assertForbidden();
         $this->context();
         DB::table('activities')->where('id', $id)->update(['starts_at' => now()->subDays(2), 'ends_at' => now()->subDay()]);

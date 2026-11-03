@@ -551,13 +551,23 @@ Jangan membuat page builder.
 
 Gunakan curated template Bali Santih.
 
-Contoh:
+Template yang tersedia (semua bernuansa Bali; `SettingsManager::TEMPLATES`, CSS di `public.css` + `public-templates.css`):
 
 ```text
-Template 01
-Template 02
-Template 03
+template-01  Bali Santih  editorial gading, tinta, garis emas      (aksen #b94715)
+template-02  Subak        hijau sawah berundak, emas padi          (aksen #2f6b3a)
+template-03  Poleng       kotak hitam-putih poleng, merah, tegas   (aksen #a3201b)
+template-04  Prada        merah marun, hiasan emas prada, simetris (aksen #8c1c22)
+template-05  Segara       biru laut, pasir pantai, ombak, lapang   (aksen #0f6e8c)
 ```
+
+Memilih template di Pengaturan website ikut mengisi warna aksen yang serasi; warna aksen tetap boleh diganti Banjar.
+
+Logo Banjar (Profil website, media berstatus Publik) menggantikan tanda huruf "B" di **semua** tempat: website publik, bilah atas halaman pengurus, login, portal warga (Banjar terpilih), dan ikon tab/favicon. Tanpa logo publik, tanda huruf tetap dipakai.
+
+Profil website menyediakan tombol **Pakai contoh kalimat** untuk Kalimat pembuka, Tentang Banjar, dan Sejarah (`ContentManager::profileTemplates`); teks dalam [kurung] wajib diganti pengurus.
+
+Lokasi Banjar cukup **satu tautan Google Maps** (`website_profiles.maps_url`; hanya https dari maps.app.goo.gl, goo.gl/maps, google.<tld>/maps, maps.google.<tld>), bukan lintang/bujur. Koordinat lama otomatis dijadikan tautan.
 
 Tenant dapat mengganti:
 
@@ -1873,13 +1883,41 @@ Simpan histori pemeriksaan.
 
 # 53. PORTAL KRAMA
 
-Portal menggunakan domain Banjar yang sama:
+Portal krama memakai **satu alamat pusat untuk semua Banjar**:
 
 ```text
-banjarbiaung.balisantih.com/portal
+portal.balisantih.com   (config platform.portal_host / PORTAL_HOST)
 ```
 
-Jangan menggunakan domain aplikasi terpisah.
+Aturan:
+
+- Banjar **tidak** ditentukan dari domain, melainkan dari akun warga yang login. Banjar aktif disimpan di sesi (`portal_banjar_id`) dan diperiksa ulang setiap request.
+- Warga boleh masuk ke suatu Banjar bila: keanggotaan & akun aktif, Banjar aktif, memiliki peran dengan `krama.self` (lingkup BANJAR), serta modul **KRAMA** dan **PORTAL** Banjar itu aktif.
+- Satu Banjar → langsung ke `/portal/beranda`. Lebih dari satu → `/pilih-banjar` (bisa berpindah lewat menu "Ganti banjar"). Tidak ada → login ditolak.
+- Modul PORTAL dimatikan di tengah sesi → warga dikembalikan ke `/pilih-banjar`.
+- Host portal hanya melayani halaman warga: `/portal/*`, `/payments` (QRIS warga), `/aktivitas`, `/notifications`, `/admin/krama/mine` & pengajuan perubahan data diri. Halaman pengurus (`/admin/*` lainnya, `/platform`) dan website publik = 404.
+- Menu portal hanya berisi menu warga walau akunnya juga pengurus.
+- Sesi tetap host-only: login di portal tidak berlaku di domain Banjar, dan sebaliknya.
+- Subdomain Banjar tidak boleh sama dengan host portal maupun host platform.
+- Halaman warga di domain Banjar (`<banjar>.balisantih.com/portal`) tetap berfungsi.
+
+Informasi yang dapat dilihat warga (peran Krama / `krama.self`):
+
+- **Laporan keuangan** (`/portal/laporan`, modul FINANCE): laporan kas per periode sangkep yang sudah **FINALIZED**, sama dengan yang dibacakan saat sangkep (rincian masuk/keluar, posisi dana, piutang total, tanda tangan) beserta PDF. Draf tidak tampil. Saat koreksi masih draf, versi final terakhir tetap tampil; versi lama disembunyikan setelah koreksinya final.
+- **Jadwal & kegiatan** (`/aktivitas`): jadwal kegiatan Banjar yang sudah terbit (status PUBLISHED dan `published_at` sudah lewat) mulai hari ini. Kegiatan PUBLIC tampil untuk semua warga; kegiatan INTERNAL (mis. paruman tertutup) hanya bagi warga/KK yang menjadi pesertanya. Ada penanda bila ada presensi untuk warga/KK-nya, dan catatan kehadiran + pemberitahuan izin.
+- **Riwayat pembayaran** (`/portal/riwayat-pembayaran`, modul FINANCE): tagihan KK warga yang sudah lunas — tanggal bayar, tagihan, cara bayar (**Tunai** dicatat Petengen / **QRIS**), jumlah. Pelunasan yang dibatalkan tidak tampil.
+- Beranda portal merangkum: tagihan belum lunas, kegiatan terdekat (presensi KK-nya atau kegiatan Banjar terdekat), pembayaran terakhir, laporan sangkep terakhir, pengajuan surat.
+
+Akun portal warga (aktivasi oleh Admin Banjar, izin `krama.configure`):
+
+- Admin Banjar cukup klik **Aktifkan akun warga** di halaman krama atau kolom "Akun portal" pada Daftar krama. Syarat: krama berstatus Aktif dan NIK sudah diisi.
+- Nama pengguna = **NIK** (disimpan sebagai HMAC `users.nik_hash`; NIK asli tetap hanya terenkripsi di tabel krama). Kata sandi awal = **`balisantih`**. Email tidak wajib.
+- Kata sandi awal **wajib diganti** saat pertama masuk (`users.must_change_password`); semua halaman tenant dialihkan ke `/akun/kata-sandi` sampai diganti. Kata sandi baru minimal 8 karakter berisi huruf dan angka, tidak boleh `balisantih`.
+- NIK yang sama di Banjar lain = orang yang sama: akun yang ada dipakai ulang (kata sandi tidak berubah) dan warga memilih Banjar di portal.
+- Warga lupa kata sandi → Admin Banjar menekan **Reset kata sandi ke awal** (kembali ke `balisantih`, wajib diganti lagi). Reset hanya untuk akun warga murni (dibuat lewat NIK, tanpa peran pengurus/platform di Banjar mana pun).
+- NIK krama diubah → nama pengguna akunnya ikut berubah.
+- Login dengan NIK berlaku di portal pusat dan domain Banjar; Super Admin tetap login dengan email.
+- Semua pengguna tenant dapat mengganti kata sandi sendiri lewat tautan "Kata sandi" di bilah atas.
 
 Navigation sederhana:
 

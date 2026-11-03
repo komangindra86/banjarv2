@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import './theme.css';
 @import './public.css';
+@import './public-templates.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -70,6 +71,8 @@ dialog::backdrop { background: rgba(30, 24, 18, .45); }
     .button { @apply inline-flex min-h-12 items-center justify-center gap-4 rounded-xl bg-[#b94715] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#97370f]; }
     .button-secondary { @apply inline-flex min-h-12 items-center justify-center rounded-xl border border-[#ddd2c6] bg-[#fffaf5] px-4 py-3 text-sm font-semibold hover:bg-[#fff1e6]; }
     .button-quiet { @apply min-h-12 rounded-lg px-3 text-sm font-semibold text-[#756d66] hover:bg-[#f5ede4]; }
+    .topbar-actions { @apply flex items-center gap-1; }
+    a.button-quiet { @apply inline-flex items-center; }
     .navigation { @apply border-b border-[#e8e1d9] bg-white; }
     .navigation > div { @apply mx-auto flex max-w-6xl gap-1 px-5 sm:px-8; }
     .navigation a { @apply flex min-h-14 flex-1 items-center justify-center border-b-2 border-transparent px-2 text-sm font-semibold text-[#756d66] sm:flex-none sm:px-6; }

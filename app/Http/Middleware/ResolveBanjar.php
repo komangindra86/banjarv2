@@ -16,8 +16,11 @@ final class ResolveBanjar
         $this->tenant->clear();
         try {
             $platform = $request->getHost() === config('platform.host');
+            // Portal pusat tidak terikat satu domain Banjar; ResolvePortalBanjar memilih Banjar dari sesi setelah session aktif.
+            $portal = ! $platform && $request->getHost() === config('platform.portal_host');
             $request->attributes->set('platform', $platform);
-            if (! $platform) {
+            $request->attributes->set('portal', $portal);
+            if (! $platform && ! $portal) {
                 $banjar = DB::table('tenant_domains as d')->join('banjars as b', 'b.id', '=', 'd.banjar_id')
                     ->where('d.domain', $request->getHost())->where('d.verification_status', 'VERIFIED')
                     ->whereNotNull('d.verified_at')->where('b.status', 'ACTIVE')->select('b.*')->first();

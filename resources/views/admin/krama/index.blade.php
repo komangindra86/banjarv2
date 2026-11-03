@@ -1,6 +1,7 @@
 @extends('layouts.app')
 @section('title', 'Keluarga & krama')
 @section('content')
+@php($canAccount = $access->tenant(auth()->user(), 'krama.configure'))
 <div class="page-heading"><div><span class="eyebrow">DATA BANJAR</span><h1>Keluarga & krama</h1><p class="muted">Kelola keluarga dan anggota dalam wilayah tugas Anda.</p></div>@if($access->tenant(auth()->user(), 'krama.manage'))<a class="button" href="/admin/krama/{{ $people ? 'people' : 'households' }}/create">+ {{ $people ? 'Tambah krama' : 'Tambah KK' }}</a>@endif</div>
 @include('admin.krama.nav')
 <div class="inline-links mb-6"><a href="/admin/krama" @if(!$people) aria-current="page" @endif>Kartu keluarga</a><a href="/admin/krama?tab=people" @if($people) aria-current="page" @endif>Daftar krama</a></div>
@@ -11,7 +12,7 @@
 @else
 <div class="table-scroll"><table class="data-table"><thead>
 @if($people)
-<tr><th>Nama</th><th>KK</th><th>Hubungan</th><th>Status</th></tr>
+<tr><th>Nama</th><th>KK</th><th>Hubungan</th><th>Status</th><th>Akun portal</th></tr>
 @else
 <tr><th>Kode KK</th><th>Kepala keluarga</th><th>Anggota</th><th>Status</th></tr>
 @endif
@@ -24,6 +25,7 @@
     <td class="muted">{{ $row->household_code ?? '—' }}</td>
     <td class="muted">{{ $relationLabel }}</td>
     <td><span class="badge">{{ \App\Modules\Krama\KramaManager::STATUSES[$row->status] }}</span></td>
+    <td>@if($row->user_id)<span class="badge">Aktif</span>@elseif($row->status !== 'ACTIVE')<span class="muted">—</span>@elseif(!$row->nik)<a class="text-link" href="/admin/krama/people/{{ $row->id }}">Isi NIK dulu</a>@elseif($canAccount)<form method="post" action="/admin/krama/people/{{ $row->id }}/account">@csrf<button class="button-secondary" type="submit">Aktifkan</button></form>@else<span class="muted">Belum</span>@endif</td>
 </tr>
 @else
 <tr>

@@ -18,6 +18,32 @@ final class ContentManager
 {
     public function __construct(private TenantQuery $query, private CurrentBanjar $tenant, private Access $access, private ModuleGate $gate, private Audit $audit) {}
 
+    // Hanya tautan Google Maps (https): maps.app.goo.gl/…, goo.gl/maps/…, google.<tld>/maps/…, maps.google.<tld>/….
+    public static function isMapsUrl(string $url): bool
+    {
+        $parts = parse_url(trim($url));
+        if (($parts['scheme'] ?? '') !== 'https' || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])) {
+            return false;
+        }
+        $host = strtolower($parts['host']);
+        $path = $parts['path'] ?? '/';
+
+        return $host === 'maps.app.goo.gl'
+            || ($host === 'goo.gl' && str_starts_with($path, '/maps'))
+            || (bool) preg_match('/^maps\.google\.[a-z]{2,3}(\.[a-z]{2})?$/', $host)
+            || (preg_match('/^(www\.)?google\.[a-z]{2,3}(\.[a-z]{2})?$/', $host) && str_starts_with($path, '/maps'));
+    }
+
+    // Contoh kalimat profil yang bisa dipakai lalu disesuaikan; [teks dalam kurung] wajib diganti pengurus.
+    public static function profileTemplates(string $banjar): array
+    {
+        return [
+            'tagline' => "Om Swastiastu. Selamat datang di website resmi {$banjar}, wadah informasi, kegiatan, dan layanan bagi seluruh krama.",
+            'description' => "{$banjar} adalah banjar adat di wilayah Desa Adat [nama desa adat], Kecamatan [nama kecamatan], Kabupaten [nama kabupaten], Bali. Banjar menjadi pusat kehidupan adat, sosial, dan keagamaan krama, berlandaskan Tri Hita Karana: hubungan harmonis dengan Ida Sang Hyang Widhi Wasa (parahyangan), sesama krama (pawongan), dan alam lingkungan (palemahan).\n\nSaat ini {$banjar} mewadahi sekitar [jumlah] kepala keluarga yang bersama-sama ngayah, mengikuti paruman, serta menyelenggarakan upacara di pura dan bale banjar. Kegiatan banjar dipimpin oleh Kelian Adat bersama para prajuru: Penyarikan, Petengen, dan Kesinoman.\n\nMelalui website ini, krama dapat mengikuti pengumuman, jadwal kegiatan, laporan, dan layanan banjar dengan lebih mudah.",
+            'history' => "{$banjar} berdiri sekitar tahun [tahun berdiri], berawal dari [jumlah] keluarga yang menetap di wilayah [nama wilayah] dan sepakat membentuk satu kesatuan banjar adat. Nama [nama banjar] berasal dari [asal-usul nama, misalnya nama tempat, pohon, atau peristiwa].\n\nBale banjar pertama dibangun pada tahun [tahun] secara gotong royong oleh krama, kemudian dipugar pada tahun [tahun]. Seiring waktu, jumlah krama terus bertambah dan berbagai kegiatan adat, seni, dan kepemudaan (sekaa teruna) tumbuh di banjar ini.\n\nHingga kini, {$banjar} tetap menjaga awig-awig dan pararem yang diwariskan para pendahulu, sambil terus beradaptasi dengan perkembangan zaman demi kesejahteraan seluruh krama.",
+        ];
+    }
+
     public function authorize(User $actor, string $type): array
     {
         $definition = ContentCatalog::get($type);
@@ -116,7 +142,11 @@ final class ContentManager
         $data = Validator::make($input, [
             'tagline' => ['nullable', 'string', 'max:255'], 'description' => ['nullable', 'string', 'max:10000'], 'history' => ['nullable', 'string', 'max:20000'],
             'address' => ['nullable', 'string', 'max:2000'], 'phone' => ['nullable', 'regex:/^[+0-9 ()-]{6,30}$/'], 'email' => ['nullable', 'email', 'max:255'],
-            'latitude' => ['nullable', 'required_with:longitude', 'numeric', 'between:-90,90'], 'longitude' => ['nullable', 'required_with:latitude', 'numeric', 'between:-180,180'],
+            'maps_url' => ['nullable', 'string', 'max:500', function ($attribute, $value, $fail) {
+                if (! self::isMapsUrl((string) $value)) {
+                    $fail('Tempel tautan dari Google Maps (tombol Bagikan → Salin link).');
+                }
+            }],
             'logo_id' => ['nullable', 'integer', $this->mediaRule()], 'cover_id' => ['nullable', 'integer', $this->mediaRule()],
         ])->validate();
         DB::transaction(function () use ($actor, $data) {

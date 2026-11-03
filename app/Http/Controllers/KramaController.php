@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Modules\Krama\AccountManager;
 use App\Modules\Krama\ChangeManager;
 use App\Modules\Krama\KramaAccess;
 use App\Modules\Krama\KramaManager;
@@ -111,7 +112,10 @@ final class KramaController extends Controller
             $patusDraft = ['title' => 'Patus - '.$row->name, 'reference' => 'PATUS-'.$now->format('Ymd-His'), 'event_date' => $now->toDateString()];
         }
 
-        return view('admin.krama.person', ['row' => $row, 'canEdit' => $canEdit, 'households' => $households, 'lockedHousehold' => $lockedHousehold, 'isHead' => $isHead, 'accounts' => $accounts, 'canPatus' => $canPatus, 'patusTypes' => $patusTypes, 'patusType' => $patusType, 'patusDraft' => $patusDraft, 'units' => $this->scope->units($actor, $canEdit ? 'krama.manage' : 'krama.view')->get(), 'selectedUnits' => $id ? $this->query->table('krama_unit_memberships')->where('krama_id', $id)->pluck('unit_id')->all() : []]);
+        $portalAccount = $row && $row->user_id ? DB::table('users')->where('id', $row->user_id)->first(['id', 'email', 'nik_hash', 'must_change_password', 'status']) : null;
+        $canAccount = $row && $this->access->tenant($actor, 'krama.configure');
+
+        return view('admin.krama.person', ['portalAccount' => $portalAccount, 'canAccount' => $canAccount, 'canResetAccount' => $canAccount && $portalAccount && AccountManager::wargaOnly($portalAccount->id), 'row' => $row, 'canEdit' => $canEdit, 'households' => $households, 'lockedHousehold' => $lockedHousehold, 'isHead' => $isHead, 'accounts' => $accounts, 'canPatus' => $canPatus, 'patusTypes' => $patusTypes, 'patusType' => $patusType, 'patusDraft' => $patusDraft, 'units' => $this->scope->units($actor, $canEdit ? 'krama.manage' : 'krama.view')->get(), 'selectedUnits' => $id ? $this->query->table('krama_unit_memberships')->where('krama_id', $id)->pluck('unit_id')->all() : []]);
     }
 
     public function savePerson(Request $request, KramaManager $manager, ?int $id = null)
@@ -139,6 +143,21 @@ final class KramaController extends Controller
         }
 
         return $redirect;
+    }
+
+    // §53: Admin Banjar cukup klik — akun warga dibuat dengan NIK sebagai nama pengguna dan kata sandi awal.
+    public function activateAccount(Request $request, AccountManager $accounts, int $id)
+    {
+        $accounts->activate($request->user(), $id);
+
+        return back()->with('success', 'Akun portal aktif. Warga login dengan NIK dan kata sandi awal "'.AccountManager::DEFAULT_PASSWORD.'", lalu wajib menggantinya saat pertama masuk.');
+    }
+
+    public function resetAccount(Request $request, AccountManager $accounts, int $id)
+    {
+        $accounts->resetPassword($request->user(), $id);
+
+        return back()->with('success', 'Kata sandi dikembalikan ke kata sandi awal "'.AccountManager::DEFAULT_PASSWORD.'". Warga wajib menggantinya saat masuk.');
     }
 
     public function units(Request $request)

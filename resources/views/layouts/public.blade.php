@@ -4,9 +4,10 @@
 <meta name="description" content="{{ $seoDescription }}"><meta name="theme-color" content="{{ $settings->accent_color }}">
 <link rel="canonical" href="{{ $canonical }}"><meta property="og:locale" content="id_ID"><meta property="og:type" content="{{ isset($item) ? 'article' : 'website' }}"><meta property="og:site_name" content="{{ $currentBanjar->name }}"><meta property="og:title" content="{{ $seoTitle }}"><meta property="og:description" content="{{ $seoDescription }}"><meta property="og:url" content="{{ $canonical }}">
 <meta property="og:image" content="{{ $baseUrl.($seoImage ?? '/icons/icon-512.png') }}"><meta name="twitter:card" content="summary_large_image">
-<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icons/icon-192.png">
+@php $siteLogo = $publicContent->image($profile->logo_id ?? null); @endphp
+<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="{{ $siteLogo ?? '/icons/icon-192.png' }}"><link rel="apple-touch-icon" href="{{ $siteLogo ?? '/icons/icon-192.png' }}">
 @vite(['resources/css/app.css', 'resources/js/app.js'])
-</head><body class="public-site" style="--banjar-accent: {{ $settings->accent_color }}">
+</head><body class="public-site {{ $settings->template_code ?? 'template-01' }}" style="--banjar-accent: {{ $settings->accent_color }}">
 
 @php
     $bareName = trim(preg_replace('/^banjar(\s+adat)?\s+/i', '', $currentBanjar->name)) ?: $currentBanjar->name;
@@ -15,7 +16,7 @@
 <a class="skip-link" href="#main">Langsung ke isi</a>
 <div class="public-strip"><div><span>Om Swastiastu</span><a href="/login">Masuk pengurus →</a></div></div>
 <header class="public-header"><div class="public-header-inner">
-<a class="brand" href="/" aria-label="{{ $currentBanjar->name }}, beranda">@if($logo = $publicContent->image($profile->logo_id ?? null))<img src="{{ $logo }}" alt="" class="public-logo">@else<span class="site-mark" aria-hidden="true">{{ mb_strtoupper(mb_substr($bareName, 0, 1)) }}</span>@endif<span class="brand-name">{{ $currentBanjar->name }}<small>Banjar Adat · Bali</small></span></a>
+<a class="brand" href="/" aria-label="{{ $currentBanjar->name }}, beranda">@if($siteLogo)<img src="{{ $siteLogo }}" alt="" class="public-logo">@else<span class="site-mark" aria-hidden="true">{{ mb_strtoupper(mb_substr($bareName, 0, 1)) }}</span>@endif<span class="brand-name">{{ $currentBanjar->name }}<small>Banjar Adat · Bali</small></span></a>
 <nav aria-label="Navigasi publik" class="public-nav">@foreach(['/' => 'Beranda', '/pengumuman' => 'Kabar', '/agenda' => 'Agenda', '/layanan' => 'Layanan', '/profil' => 'Profil'] as $url => $label)@if($url !== '/agenda' || $gate->allows('ACTIVITY'))<a href="{{ $url }}" @if(request()->getPathInfo() === $url || ($url !== '/' && str_starts_with(request()->getPathInfo(), $url.'/'))) aria-current="page" @endif>{{ $label }}</a>@endif @endforeach</nav>
 </div></header>
 <main id="main" class="public-main">@yield('content')</main>

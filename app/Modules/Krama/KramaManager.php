@@ -184,6 +184,14 @@ final class KramaManager
             }
             $data['user_id'] = $userId;
             if (! empty($data['nik'])) {
+                // Akun portal warga login dengan NIK: NIK baru ikut memperbarui nama pengguna akunnya.
+                if ($userId && DB::table('users')->where('id', $userId)->whereNotNull('nik_hash')->exists()) {
+                    $hash = AccountManager::nikHash($data['nik']);
+                    if (DB::table('users')->where('nik_hash', $hash)->where('id', '<>', $userId)->exists()) {
+                        $this->fail('nik', 'NIK ini sudah dipakai akun warga lain.');
+                    }
+                    DB::table('users')->where('id', $userId)->update(['nik_hash' => $hash, 'updated_at' => now()]);
+                }
                 $data['nik'] = Crypt::encryptString($data['nik']);
             } elseif (! empty($data['clear_nik'])) {
                 $data['nik'] = null;

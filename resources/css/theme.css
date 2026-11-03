@@ -20,6 +20,7 @@ a:focus-visible, button:focus-visible { outline-color: var(--ui-accent); }
 .brand { font-weight: 750; letter-spacing: -.035em; font-size: 17px; }
 .brand small { color: var(--ui-muted); font-size: 10px; letter-spacing: .08em; margin-top: 4px; }
 .brand-mark { width: 44px; height: 44px; border-radius: 14px; background: var(--ui-orange); color: #292522; font-family: inherit; font-weight: 850; font-size: 26px; box-shadow: inset 0 0 0 1px #2925220a; }
+.brand-logo { width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; object-fit: contain; background: #fff; box-shadow: 0 0 0 1px var(--ui-line); }
 .eyebrow { color: var(--ui-accent); font-size: 10px; letter-spacing: .17em; font-weight: 750; }
 .muted, .help { color: var(--ui-muted); }
 .page { padding-top: 38px; }
@@ -54,6 +55,7 @@ a:focus-visible, button:focus-visible { outline-color: var(--ui-accent); }
 .data-table td { padding: 13px 20px; border-bottom: 1px solid var(--ui-line); white-space: nowrap; }
 .data-table tbody tr:last-child td { border-bottom: 0; }
 .data-table tbody tr:hover { background: #fffaf5; }
+.data-table th.num, .data-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .data-table td a { color: var(--ui-ink); font-weight: 650; text-decoration: none; }
 .data-table td a:hover { color: var(--ui-accent); }
 @media(max-width: 600px) {
@@ -90,6 +92,7 @@ a:focus-visible, button:focus-visible { outline-color: var(--ui-accent); }
     .topbar-inner { padding-top: 16px; padding-bottom: 16px; }
     .brand { font-size: 15px; }
     .brand-mark { width: 40px; height: 40px; border-radius: 12px; }
+    .brand-logo { width: 40px; height: 40px; border-radius: 12px; }
     .page { padding-top: 24px; }
     .welcome-panel { padding: 26px; border-radius: 19px; }
     .welcome-panel h1 { font-size: 28px; }
@@ -139,3 +142,23 @@ a:focus-visible, button:focus-visible { outline-color: var(--ui-accent); }
     .activity-row { grid-template-columns: 48px minmax(0, 1fr); }
     .activity-row > .badge { grid-column: 2; }
 }
+/* Daftar riwayat portal warga: bertumpuk agar terbaca di layar HP (tanpa gulir samping). */
+.history-list { padding: 0; }
+.history-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--ui-line); color: inherit; text-decoration: none; }
+.history-row:last-child { border-bottom: 0; }
+a.history-row:hover { background: #fffaf5; }
+.history-row .help { display: block; margin-top: 2px; }
+.history-amount { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; text-align: right; font-variant-numeric: tabular-nums; }
+/* Pengaturan website: pilihan template berupa kartu dengan pratinjau palet. */
+.template-picker { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; min-width: 0; }
+.template-picker legend { font-weight: 650; font-size: 14px; margin-bottom: 4px; }
+.template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 8px; }
+.template-choice { position: relative; display: grid; gap: 6px; align-content: start; padding: 14px; border: 1px solid var(--ui-line); border-radius: 14px; background: #fff; cursor: pointer; font-weight: 400; }
+.template-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.template-choice:has(input:checked) { border-color: var(--ui-orange); box-shadow: 0 0 0 2px var(--ui-orange); }
+.template-choice:has(input:focus-visible) { outline: 2px solid var(--ui-ink); outline-offset: 2px; }
+.template-choice strong { font-size: 15px; }
+.template-swatches { display: flex; height: 30px; border-radius: 9px; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); }
+.template-swatches span { flex: 1; }
+/* Profil website: tombol "Pakai contoh kalimat" kecil di bawah kolomnya, bukan selebar form. */
+.template-fill { justify-self: start; margin-top: -8px; color: var(--ui-accent); }

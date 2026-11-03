@@ -27,7 +27,7 @@ final class TenantManager
             'admin_password' => ['required', 'confirmed', Password::min(12)->letters()->numbers()],
         ])->validate();
         $domain = $data['slug'].'.'.config('platform.tenant_base_domain');
-        if ($domain === config('platform.host') || strlen($domain) > 253 || DB::table('tenant_domains')->where('domain', $domain)->exists()) {
+        if (in_array($domain, [config('platform.host'), config('platform.portal_host')], true) || strlen($domain) > 253 || DB::table('tenant_domains')->where('domain', $domain)->exists()) {
             throw ValidationException::withMessages(['slug' => 'Subdomain sudah dipakai atau tidak valid.']);
         }
 

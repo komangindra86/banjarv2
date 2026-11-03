@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AssetController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PlatformController;
 use App\Http\Controllers\PortalController;
+use App\Http\Controllers\PortalInfoController;
 use App\Http\Controllers\PublicWebsiteController;
 use App\Http\Controllers\PwaController;
 use App\Http\Controllers\WebsiteAdminController;
@@ -52,6 +54,20 @@ Route::middleware(['access:tenant', 'module:ACTIVITY,ACTIVE', 'module:KRAMA'])->
 
 // Beranda degrades per card: reachable with only KRAMA active, each summary hidden if its own module/permission is missing.
 Route::middleware(['access:tenant', 'module:KRAMA'])->get('/portal/beranda', [PortalController::class, 'home']);
+// §53: informasi untuk warga — laporan kas per periode sangkep dan riwayat pembayaran (tunai & QRIS).
+Route::prefix('portal')->middleware(['access:tenant,krama.self', 'module:KRAMA', 'module:FINANCE'])->group(function () {
+    Route::get('/laporan', [PortalInfoController::class, 'reports']);
+    Route::get('/laporan/{id}', [PortalInfoController::class, 'report'])->whereNumber('id');
+    Route::get('/laporan/{id}/pdf', [PortalInfoController::class, 'reportPdf'])->whereNumber('id');
+    Route::get('/riwayat-pembayaran', [PortalInfoController::class, 'payments']);
+});
+// §53: portal pusat (config platform.portal_host) — pilih Banjar bila akun terdaftar di lebih dari satu Banjar.
+Route::get('/pilih-banjar', [PortalController::class, 'choose']);
+Route::post('/pilih-banjar', [PortalController::class, 'select'])->middleware('throttle:20,1');
+Route::middleware('access:tenant')->group(function () {
+    Route::get('/akun/kata-sandi', [AccountController::class, 'password']);
+    Route::post('/akun/kata-sandi', [AccountController::class, 'updatePassword'])->middleware('throttle:10,1');
+});
 
 Route::prefix('notifications')->middleware(['access:tenant', 'module:NOTIFICATION'])->group(function () {
     Route::get('/', [NotificationController::class, 'index']);
@@ -219,6 +235,8 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
         Route::post('/people', [KramaController::class, 'savePerson']);
         Route::get('/people/{id}', [KramaController::class, 'person'])->whereNumber('id');
         Route::patch('/people/{id}', [KramaController::class, 'savePerson'])->whereNumber('id');
+        Route::post('/people/{id}/account', [KramaController::class, 'activateAccount'])->whereNumber('id')->middleware('throttle:60,1');
+        Route::post('/people/{id}/account/reset', [KramaController::class, 'resetAccount'])->whereNumber('id')->middleware('throttle:20,1');
         Route::get('/people/{id}/change', [KramaController::class, 'changeForm'])->whereNumber('id');
         Route::post('/people/{id}/change', [KramaController::class, 'submitChange'])->whereNumber('id');
         Route::get('/changes', [KramaController::class, 'changes']);

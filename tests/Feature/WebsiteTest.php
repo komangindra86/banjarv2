@@ -209,10 +209,37 @@ class WebsiteTest extends TestCase
         $this->post($this->host.'/admin/content/dokumen', ['title' => 'Panduan', 'status' => 'PUBLISHED', 'media_id' => $pdf])->assertRedirect()->assertSessionHasNoErrors();
         $this->get($this->host.'/dokumen/panduan')->assertOk()->assertSee('Unduh dokumen');
         $this->get($this->host.'/media/'.$pdf)->assertOk()->assertHeader('Content-Disposition', 'attachment; filename=berkas-'.$pdf.'.pdf');
-        $this->patch($this->host.'/admin/profile', ['description' => 'Cerita alpha', 'logo_id' => $photo, 'latitude' => -8.65, 'longitude' => 115.2])->assertRedirect()->assertSessionHasNoErrors();
-        $this->get($this->host.'/profil')->assertOk()->assertSee('Cerita alpha')->assertSee('https://www.google.com/maps/search/', false);
+        $this->patch($this->host.'/admin/profile', ['description' => 'Cerita alpha', 'logo_id' => $photo, 'maps_url' => 'https://maps.app.goo.gl/AbCd1234'])->assertRedirect()->assertSessionHasNoErrors();
+        $this->get($this->host.'/profil')->assertOk()->assertSee('Cerita alpha')->assertSee('href="https://maps.app.goo.gl/AbCd1234"', false);
         $this->get('http://beta.localhost/profil')->assertOk()->assertDontSee('Cerita alpha');
-        $this->patch($this->host.'/admin/profile', ['latitude' => 100, 'longitude' => 115])->assertSessionHasErrors('latitude');
+        // Hanya tautan Google Maps https yang diterima.
+        foreach (['http://maps.app.goo.gl/x', 'https://evil.example/maps', 'javascript:alert(1)', 'https://google.com.evil.io/maps'] as $bad) {
+            $this->patch($this->host.'/admin/profile', ['maps_url' => $bad])->assertSessionHasErrors('maps_url');
+        }
+        foreach (['https://www.google.com/maps/place/Bale+Banjar/@-8.6,115.2,17z', 'https://www.google.co.id/maps/@-8.6,115.2,17z', 'https://goo.gl/maps/xyz', 'https://maps.google.com/?q=-8.6,115.2'] as $good) {
+            $this->patch($this->host.'/admin/profile', ['maps_url' => $good])->assertSessionHasNoErrors();
+        }
+        // Logo menggantikan tanda "B" di website publik, halaman pengurus, dan ikon tab.
+        $this->get($this->host.'/')->assertOk()->assertSee('<link rel="icon" href="/media/'.$photo.'"', false)->assertSee('class="public-logo"', false);
+        $this->get($this->host.'/admin/website')->assertOk()->assertSee('class="brand-logo" src="/media/'.$photo.'"', false)->assertDontSee('<span class="brand-mark"', false);
+        $this->patch($this->host.'/admin/profile', ['logo_id' => $private])->assertSessionHasNoErrors();
+        $this->get($this->host.'/admin/website')->assertOk()->assertSee('<span class="brand-mark"', false);
+    }
+
+    public function test_five_balinese_templates_and_profile_sentence_templates(): void
+    {
+        $this->login();
+        $settings = DB::table('banjar_settings')->where('banjar_id', $this->a)->value('id');
+        $page = $this->get($this->host.'/admin/settings')->assertOk();
+        foreach (['Bali Santih', 'Subak', 'Poleng', 'Prada', 'Segara'] as $name) {
+            $page->assertSee($name);
+        }
+        $this->patch($this->host.'/admin/settings/'.$settings, ['template_code' => 'template-04', 'accent_color' => '#8c1c22'])->assertSessionHasNoErrors();
+        $this->get($this->host.'/')->assertOk()->assertSee('class="public-site template-04"', false);
+        $this->patch($this->host.'/admin/settings/'.$settings, ['template_code' => 'template-99', 'accent_color' => '#8c1c22'])->assertSessionHasErrors('template_code');
+
+        $this->get($this->host.'/admin/profile')->assertOk()->assertSee('Pakai contoh kalimat')->assertSee('data-fill-template="#field-history"', false)
+            ->assertSee('Tri Hita Karana')->assertSee('Lokasi di Google Maps')->assertDontSee('Lintang lokasi');
     }
 
     public function test_foreign_media_activity_and_gallery_references_are_invalid(): void

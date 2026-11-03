@@ -4,6 +4,7 @@ use App\Http\Middleware\PrivateResponse;
 use App\Http\Middleware\RequireAccess;
 use App\Http\Middleware\RequireModule;
 use App\Http\Middleware\ResolveBanjar;
+use App\Http\Middleware\ResolvePortalBanjar;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(PrivateResponse::class);
-        $middleware->web(prepend: [ResolveBanjar::class]);
+        $middleware->web(prepend: [ResolveBanjar::class], append: [ResolvePortalBanjar::class]);
         $middleware->validateCsrfTokens(except: ['webhooks/midtrans']);
         $middleware->alias([
             'access' => RequireAccess::class,

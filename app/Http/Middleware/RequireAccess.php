@@ -36,6 +36,10 @@ final class RequireAccess
         }
         $user = Auth::guard($guard)->user();
         $platform ? $this->access->requirePlatform($user) : $this->access->requireTenant($user, $permission);
+        // Akun warga yang masih memakai kata sandi awal (atau baru direset) wajib menggantinya sebelum membuka halaman lain.
+        if (! $platform && $user->must_change_password && $request->getPathInfo() !== '/akun/kata-sandi') {
+            return redirect('/akun/kata-sandi');
+        }
 
         return $next($request);
     }

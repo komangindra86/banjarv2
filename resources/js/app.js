@@ -187,6 +187,25 @@ document.querySelectorAll('[data-open-dialog]').forEach((btn) => {
 // Meninggal), dan tombol tutup generik yang tidak bergantung pada logika form tertentu.
 document.querySelectorAll('dialog[data-auto-open]').forEach((dialog) => dialog.showModal());
 document.querySelectorAll('select[data-auto-submit]').forEach((select) => select.addEventListener('change', () => select.form?.submit()));
+
+// Profil website: isi kolom dengan contoh kalimat (minta konfirmasi bila kolom sudah berisi).
+document.querySelectorAll('[data-fill-template]').forEach((button) => {
+    button.addEventListener('click', () => {
+        const field = document.querySelector(button.dataset.fillTemplate);
+        if (!field || (field.value.trim() && !window.confirm('Ganti isi kolom ini dengan contoh kalimat?'))) return;
+        field.value = button.dataset.template;
+        field.focus();
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+});
+
+// Pengaturan website: memilih template ikut mengisi warna aksen yang serasi (masih bisa diubah).
+document.querySelectorAll('input[data-template-accent]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+        const accent = document.querySelector(radio.dataset.accentTarget);
+        if (radio.checked && accent) accent.value = radio.dataset.templateAccent;
+    });
+});
 document.querySelectorAll('dialog [data-close-dialog]').forEach((btn) => {
     btn.addEventListener('click', () => btn.closest('dialog')?.close());
 });
