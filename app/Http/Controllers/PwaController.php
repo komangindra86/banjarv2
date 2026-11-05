@@ -23,10 +23,15 @@ final class PwaController extends Controller
             ($src = $brand->url('icon-512')) ? ['src' => $src, 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'] : null,
             ($src = $brand->url('maskable-512')) ? ['src' => $src, 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'] : null,
         ]) : [];
-        $icons = $icons ? array_values($icons) : [
+        // Tanpa Banjar (Super Admin, portal pusat sebelum masuk) = logo Bali Santih; Banjar tanpa logo = tanda "B".
+        $icons = $icons ? array_values($icons) : ($banjar ? [
             ['src' => '/icons/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
             ['src' => '/icons/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
-        ];
+        ] : [
+            ['src' => '/icons/balisantih-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+            ['src' => '/icons/balisantih-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
+            ['src' => '/icons/balisantih-maskable-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
+        ]);
 
         return response()->json([
             'id' => '/', 'name' => $portal ? 'Portal Krama · '.$name : ($banjar->name ?? 'Bali Santih Digital'),

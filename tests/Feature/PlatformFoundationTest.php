@@ -336,7 +336,11 @@ class PlatformFoundationTest extends TestCase
     public function test_manifest_is_tenant_aware_and_no_credentials_enter_audit(): void
     {
         $this->get('http://alpha.localhost/manifest.webmanifest')->assertOk()->assertJsonPath('name', 'Banjar alpha')->assertJsonPath('scope', '/');
-        $this->get('http://beta.localhost/manifest.webmanifest')->assertJsonPath('name', 'Banjar beta');
+        $this->get('http://beta.localhost/manifest.webmanifest')->assertJsonPath('name', 'Banjar beta')->assertJsonPath('icons.0.src', '/icons/icon-192.png');
+        // Super Admin memakai logo Bali Santih (landing page balisantih.com); Banjar tanpa logo tetap tanda "B".
+        $this->get('http://admin.banjar.localhost/manifest.webmanifest')->assertJsonPath('icons.0.src', '/icons/balisantih-192.png');
+        $this->get('http://admin.banjar.localhost/login')->assertOk()->assertSee('src="/images/balisantih-logo.png"', false)->assertSee('<link rel="icon" href="/icons/balisantih-192.png">', false);
+        $this->get('http://alpha.localhost/login')->assertOk()->assertSee('<span class="brand-mark"', false)->assertDontSee('balisantih-logo.png', false);
         $this->assertStringNotContainsString($this->password, DB::table('audit_logs')->get()->toJson());
         $this->assertStringNotContainsString('admin_password', DB::table('audit_logs')->get()->toJson());
     }

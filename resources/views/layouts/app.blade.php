@@ -12,12 +12,14 @@
             : null;
         // Ikon PNG dari logo (logo asli WebP tidak dipakai iOS saat aplikasi dipasang).
         $brandIcon = $banjarLogo ? app(\App\Modules\Website\BrandIcon::class) : null;
-        $tabIcon = $brandIcon?->url('icon-192') ?? $banjarLogo ?? '/icons/icon-192.png';
-        $touchIcon = $brandIcon?->url('apple-180') ?? $banjarLogo ?? '/icons/icon-192.png';
+        // Identitas Bali Santih (Super Admin, portal pusat sebelum Banjar terpilih) memakai logo landing page balisantih.com.
+        $platformBrand = request()->attributes->get('platform') || (request()->attributes->get('portal') && ! $currentBanjar);
+        $tabIcon = $platformBrand ? '/icons/balisantih-192.png' : ($brandIcon?->url('icon-192') ?? $banjarLogo ?? '/icons/icon-192.png');
+        $touchIcon = $platformBrand ? '/icons/balisantih-180.png' : ($brandIcon?->url('apple-180') ?? $banjarLogo ?? '/icons/icon-192.png');
     @endphp
     {{-- Pratinjau saat tautan login/portal dibagikan ke WhatsApp. --}}
     <meta property="og:site_name" content="{{ $currentBanjar->name ?? (request()->attributes->get('portal') ? 'Portal Krama' : 'Bali Santih Digital') }}"><meta property="og:title" content="@yield('title', 'Beranda') · {{ $currentBanjar->name ?? 'Bali Santih Digital' }}">
-    <meta property="og:image" content="{{ url($brandIcon?->url('share') ?? '/icons/icon-512.png') }}">
+    <meta property="og:image" content="{{ url($platformBrand ? '/images/balisantih-share.jpg' : ($brandIcon?->url('share') ?? '/icons/icon-512.png')) }}">
     {{-- use-credentials: di portal pusat manifest bergantung pada sesi warga (nama & logo Banjar-nya). --}}
     <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials"><link rel="icon" href="{{ $tabIcon }}"><link rel="apple-touch-icon" href="{{ $touchIcon }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -76,7 +78,7 @@
 @endphp
 <a href="#main" class="skip-link">Langsung ke isi</a>
 <header class="topbar"><div class="topbar-inner">
-    <a class="brand" href="{{ $signedUser && ! $onLogin ? ($isPlatform ? '/platform' : ($isPortal ? '/portal/beranda' : '/admin')) : '/login' }}">@if($banjarLogo)<img class="brand-logo" src="{{ $banjarLogo }}" alt="">@else<span class="brand-mark" aria-hidden="true">B</span>@endif<span>{{ $currentBanjar->name ?? 'Bali Santih' }}<small>{{ $isPlatform ? 'Pusat pengelolaan Banjar' : ($isPortal ? 'Portal Krama' : 'Banjar Digital') }}</small></span></a>
+    <a class="brand" href="{{ $signedUser && ! $onLogin ? ($isPlatform ? '/platform' : ($isPortal ? '/portal/beranda' : '/admin')) : '/login' }}">@if($banjarLogo)<img class="brand-logo" src="{{ $banjarLogo }}" alt="">@elseif($platformBrand)<img class="brand-logo" src="/images/balisantih-logo.png" alt="" width="44" height="44">@else<span class="brand-mark" aria-hidden="true">B</span>@endif<span>{{ $currentBanjar->name ?? 'Bali Santih' }}<small>{{ $isPlatform ? 'Pusat pengelolaan Banjar' : ($isPortal ? 'Portal Krama' : 'Banjar Digital') }}</small></span></a>
     @if($signedUser && ! $onLogin)<div class="topbar-actions">@if(! $isPlatform && $currentBanjar)<a class="button-quiet" href="/akun/kata-sandi">Kata sandi</a>@endif<form action="/logout" method="post">@csrf<button class="button-quiet" type="submit">Keluar</button></form></div>@else<span class="eyebrow hidden sm:block">DEKAT DENGAN BANJAR</span>@endif
 </div></header>
 @if($nav)<nav class="navigation" aria-label="Navigasi utama"><div>@foreach($nav as [$url, $label])<a href="{{ $url }}" @if(request()->getPathInfo() === $url || ($url !== '/admin' && $url !== '/platform' && $url !== '/portal' && str_starts_with(request()->getPathInfo(), $url.'/')) || ($url === '/portal' && str_starts_with(request()->getPathInfo(), '/portal/') && ! request()->is('portal/beranda', 'portal/laporan', 'portal/laporan/*', 'portal/riwayat-pembayaran')) || ($url === '/payments' && request()->is('portal/riwayat-pembayaran')) || ($url === '/admin/website' && request()->is('admin/content/*')) || ($url === '/admin/payments' && request()->is('admin/withdrawals', 'admin/withdrawals/*')) || ($url === '/admin/finance/events' && request()->is('admin/finance/*'))) aria-current="page" @endif><x-icon :name="str_starts_with($label, 'Notifikasi') ? 'bell' : match($label) { 'Konten' => 'news', 'Kegiatan' => 'calendar', 'Website' => 'settings', 'Audit' => 'history', 'Keuangan' => 'wallet', 'Aset' => 'box', 'Kegiatan saya' => 'calendar', 'Banjar', 'Ganti banjar', 'Data saya' => 'profile', 'Pencairan', 'Dana QRIS', 'Tagihan & QRIS' => 'wallet', 'Surat', 'Surat saya' => 'news', default => 'home' }" /><span>{{ $label }}</span></a>@endforeach</div></nav>@endif
