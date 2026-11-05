@@ -261,9 +261,10 @@ class WebsiteTest extends TestCase
         // Logo menggantikan tanda "B" di website publik, halaman pengurus, dan ikon tab.
         $this->get($this->host.'/')->assertOk()->assertSee('<link rel="icon" href="/media/'.$photo.'"', false)->assertSee('class="public-logo"', false);
         $this->get($this->host.'/admin/website')->assertOk()->assertSee('class="brand-logo" src="/media/'.$photo.'"', false)->assertDontSee('<span class="brand-mark"', false);
-        // Logo dihapus dari formulir → kembali ke tanda "B"; logo baru bisa dipilih langsung.
+        // Logo dihapus dari formulir → kembali ke logo Bali Santih; logo baru bisa dipilih langsung.
         $this->patch($this->host.'/admin/profile', ['keep_logo' => ''])->assertSessionHasNoErrors();
-        $this->get($this->host.'/admin/website')->assertOk()->assertSee('<span class="brand-mark"', false);
+        $this->get($this->host.'/admin/website')->assertOk()->assertSee('class="brand-logo" src="/images/balisantih-logo.png"', false);
+        $this->get($this->host.'/')->assertOk()->assertSee('src="/images/balisantih-logo.png" alt="" class="public-logo"', false)->assertSee('/images/balisantih-share.jpg', false)->assertDontSee('site-mark', false);
         $this->patch($this->host.'/admin/profile', ['keep_logo' => '', 'logo' => UploadedFile::fake()->image('logo-baru.png', 200, 200)])->assertSessionHasNoErrors();
         $logo = DB::table('media_files')->where('name', 'logo-baru.png')->first();
         $this->assertSame(['PUBLIC', $logo->id], [$logo->visibility, (int) DB::table('website_profiles')->where('banjar_id', $this->a)->value('logo_id')]);
@@ -299,6 +300,8 @@ class WebsiteTest extends TestCase
         $this->get($this->host.$brand.'share.png')->assertNotFound();
         $this->get($this->host.$brand.'lain-1.png')->assertNotFound();
         $this->get('http://beta.localhost'.$brand.'icon-192.png')->assertNotFound();
+        // Kartu Banjar di dasbor Super Admin memakai ikon yang sama.
+        $this->get('http://admin.banjar.localhost'.$brand.'icon-192.png')->assertOk()->assertHeader('Content-Type', 'image/png');
 
         // Logo dijadikan privat → kembali ke ikon bawaan.
         DB::table('media_files')->where('id', $logo)->update(['visibility' => 'PRIVATE']);

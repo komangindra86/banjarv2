@@ -9,10 +9,10 @@
     $brandIcon = $siteLogo ? app(\App\Modules\Website\BrandIcon::class) : null;
     $shareImage = $brandIcon?->url('share');
 @endphp
-<meta property="og:image" content="{{ $baseUrl.($shareImage ?? $seoImage ?? '/icons/icon-512.png') }}">
-@if ($shareImage)<meta property="og:image:alt" content="Logo {{ $currentBanjar->name }}"><meta property="og:image:type" content="image/jpeg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">@endif
+{{-- Banjar yang belum mengunggah logo memakai logo Bali Santih. --}}
+<meta property="og:image" content="{{ $baseUrl.($shareImage ?? '/images/balisantih-share.jpg') }}"><meta property="og:image:alt" content="Logo {{ $shareImage ? $currentBanjar->name : 'Bali Santih' }}"><meta property="og:image:type" content="image/jpeg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="{{ $brandIcon?->url('icon-192') ?? $siteLogo ?? '/icons/icon-192.png' }}"><link rel="apple-touch-icon" href="{{ $brandIcon?->url('apple-180') ?? $siteLogo ?? '/icons/icon-192.png' }}">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="{{ $brandIcon?->url('icon-192') ?? $siteLogo ?? '/icons/icon-192.png' }}"><link rel="apple-touch-icon" href="{{ $brandIcon?->url('apple-180') ?? $siteLogo ?? '/icons/icon-180.png' }}">
 @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head><body class="public-site {{ $settings->template_code ?? 'template-01' }}" style="--banjar-accent: {{ $settings->accent_color }}">
 
@@ -23,7 +23,7 @@
 <a class="skip-link" href="#main">Langsung ke isi</a>
 <div class="public-strip"><div><span>Om Swastiastu</span><a href="/login">Masuk pengurus →</a></div></div>
 <header class="public-header"><div class="public-header-inner">
-<a class="brand" href="/" aria-label="{{ $currentBanjar->name }}, beranda">@if($siteLogo)<img src="{{ $siteLogo }}" alt="" class="public-logo">@else<span class="site-mark" aria-hidden="true">{{ mb_strtoupper(mb_substr($bareName, 0, 1)) }}</span>@endif<span class="brand-name">{{ $currentBanjar->name }}<small>Banjar Adat · Bali</small></span></a>
+<a class="brand" href="/" aria-label="{{ $currentBanjar->name }}, beranda"><img src="{{ $siteLogo ?? '/images/balisantih-logo.png' }}" alt="" class="public-logo"><span class="brand-name">{{ $currentBanjar->name }}<small>Banjar Adat · Bali</small></span></a>
 <nav aria-label="Navigasi publik" class="public-nav">@foreach(['/' => 'Beranda', '/pengumuman' => 'Kabar', '/agenda' => 'Agenda', '/layanan' => 'Layanan', '/profil' => 'Profil'] as $url => $label)@if($url !== '/agenda' || $gate->allows('ACTIVITY'))<a href="{{ $url }}" @if(request()->getPathInfo() === $url || ($url !== '/' && str_starts_with(request()->getPathInfo(), $url.'/'))) aria-current="page" @endif>{{ $label }}</a>@endif @endforeach</nav>
 </div></header>
 <main id="main" class="public-main">@yield('content')</main>

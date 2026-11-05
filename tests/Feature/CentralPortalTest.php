@@ -193,7 +193,7 @@ class CentralPortalTest extends TestCase
     public function test_manifest_on_portal_is_generic(): void
     {
         $this->get($this->portal.'/manifest.webmanifest')->assertOk()->assertJson(['short_name' => 'Portal Krama', 'start_url' => '/portal/beranda'])
-            ->assertJsonPath('icons.0.src', '/icons/balisantih-192.png');
+            ->assertJsonPath('icons.0.src', '/icons/icon-192.png');
         $this->get($this->portal.'/login')->assertSee('src="/images/balisantih-logo.png"', false)->assertDontSee('<span class="brand-mark"', false);
     }
 

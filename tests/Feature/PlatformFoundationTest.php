@@ -337,10 +337,14 @@ class PlatformFoundationTest extends TestCase
     {
         $this->get('http://alpha.localhost/manifest.webmanifest')->assertOk()->assertJsonPath('name', 'Banjar alpha')->assertJsonPath('scope', '/');
         $this->get('http://beta.localhost/manifest.webmanifest')->assertJsonPath('name', 'Banjar beta')->assertJsonPath('icons.0.src', '/icons/icon-192.png');
-        // Super Admin memakai logo Bali Santih (landing page balisantih.com); Banjar tanpa logo tetap tanda "B".
-        $this->get('http://admin.banjar.localhost/manifest.webmanifest')->assertJsonPath('icons.0.src', '/icons/balisantih-192.png');
-        $this->get('http://admin.banjar.localhost/login')->assertOk()->assertSee('src="/images/balisantih-logo.png"', false)->assertSee('<link rel="icon" href="/icons/balisantih-192.png">', false);
-        $this->get('http://alpha.localhost/login')->assertOk()->assertSee('<span class="brand-mark"', false)->assertDontSee('balisantih-logo.png', false);
+        // Super Admin dan Banjar yang belum mengunggah logo memakai logo Bali Santih (landing page balisantih.com).
+        $this->get('http://admin.banjar.localhost/manifest.webmanifest')->assertJsonPath('icons.0.src', '/icons/icon-192.png');
+        $this->post('http://admin.banjar.localhost/login', ['email' => $this->super->email, 'password' => $this->password])->assertRedirect('/platform');
+        $this->get('http://admin.banjar.localhost/platform')->assertOk()->assertSee('class="tenant-logo" src="/images/balisantih-logo.png"', false)->assertDontSee('tenant-initial', false);
+        $this->get('http://admin.banjar.localhost/brand/'.$this->a.'/icon-192.png')->assertNotFound();
+        foreach (['http://admin.banjar.localhost/login', 'http://alpha.localhost/login'] as $url) {
+            $this->get($url)->assertOk()->assertSee('src="/images/balisantih-logo.png"', false)->assertSee('<link rel="icon" href="/icons/icon-192.png">', false)->assertDontSee('brand-mark', false);
+        }
         $this->assertStringNotContainsString($this->password, DB::table('audit_logs')->get()->toJson());
         $this->assertStringNotContainsString('admin_password', DB::table('audit_logs')->get()->toJson());
     }

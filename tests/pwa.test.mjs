@@ -31,7 +31,7 @@ test('install caches only generic public assets; activation preserves unrelated 
     w.handlers.install({ waitUntil: p => { pending = p; } }); await pending;
     assert.deepEqual(w.added, ['/offline.html', '/icons/icon-192.png', '/icons/icon-512.png']);
     w.handlers.activate({ waitUntil: p => { pending = p; } }); await pending;
-    assert.deepEqual(w.deleted, ['banjar-static-v1']);
+    assert.deepEqual(w.deleted, ['banjar-static-v1', 'banjar-static-v2']);
 });
 
 test('offline private navigations receive generic fallback without storing private HTML', async () => {

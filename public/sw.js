@@ -1,4 +1,4 @@
-const CACHE = 'banjar-static-v2';
+const CACHE = 'banjar-static-v3';
 const STATIC = ['/offline.html', '/icons/icon-192.png', '/icons/icon-512.png'];
 self.addEventListener('install', event => {
     event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)).then(() => self.skipWaiting()));

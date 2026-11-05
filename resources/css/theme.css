@@ -32,6 +32,7 @@ a:focus-visible, button:focus-visible { outline-color: var(--ui-accent); }
 .tenant-card:hover { border-color: #dfa783; box-shadow: 0 8px 22px #38281809; transform: translateY(-2px); }
 .tenant-card h2 { font-size: 17px; margin-top: 17px; }
 .tenant-initial { background: var(--ui-peach); color: var(--ui-accent); font-family: inherit; font-weight: 750; border-radius: 15px; }
+.tenant-logo { width: 48px; height: 48px; flex-shrink: 0; border-radius: 15px; object-fit: contain; background: #fff; box-shadow: 0 0 0 1px var(--ui-line); }
 .badge { border: 1px solid #f1d8c4; background: var(--ui-peach); color: #973c17; letter-spacing: .035em; font-size: 10px; }
 .badge-muted { border-color: var(--ui-line); background: #f3f0eb; color: #71665c; }
 .button { background: var(--ui-accent); color: #fff; border: 1px solid transparent; border-radius: 12px; box-shadow: 0 3px 7px #a93e1115; font-weight: 650; }

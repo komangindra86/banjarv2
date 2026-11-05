@@ -11,8 +11,13 @@ final class PlatformController extends Controller
     public function index(Request $request)
     {
         $search = mb_substr((string) $request->query('q', ''), 0, 100);
+        // Logo Banjar (Publik, modul Website aktif) untuk kartu; tanpa logo kartu memakai logo Bali Santih.
         $banjars = DB::table('banjars as b')->leftJoin('tenant_domains as d', 'd.id', '=', 'b.primary_domain_id')
-            ->when($search !== '', fn ($q) => $q->where('b.name', 'like', '%'.$search.'%'))->select('b.*', 'd.domain')->orderByDesc('b.id')->paginate(12)->withQueryString();
+            ->leftJoin('website_profiles as wp', 'wp.banjar_id', '=', 'b.id')
+            ->leftJoin('media_files as logo', fn ($j) => $j->on('logo.id', '=', 'wp.logo_id')->where('logo.visibility', 'PUBLIC')->where('logo.mime', 'like', 'image/%'))
+            ->leftJoin('banjar_modules as web', fn ($j) => $j->on('web.banjar_id', '=', 'b.id')->where('web.code', 'WEBSITE')->where('web.status', 'ACTIVE'))
+            ->when($search !== '', fn ($q) => $q->where('b.name', 'like', '%'.$search.'%'))
+            ->select('b.*', 'd.domain', DB::raw('CASE WHEN web.id IS NOT NULL THEN logo.id END as logo_id'))->orderByDesc('b.id')->paginate(12)->withQueryString();
 
         return view('platform.index', compact('banjars', 'search'));
     }
