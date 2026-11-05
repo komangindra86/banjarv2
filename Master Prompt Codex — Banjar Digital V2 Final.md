@@ -1957,6 +1957,10 @@ Pengajuan
 
 ---
 
+
+**Keamanan akun lintas Banjar.** Satu akun warga boleh terdaftar di beberapa Banjar (NIK sama), tetapi Admin satu Banjar tidak boleh mereset kata sandi atau mengganti NIK login akun yang juga terdaftar di Banjar lain. Mengetahui NIK seseorang tidak boleh cukup untuk mengambil alih akunnya. Warga mengganti kata sandinya sendiri, atau meminta bantuan Bali Santih.
+
+**Akun demo reviewer.** Akun demo bersama (`users.password_locked`) memakai kata sandi yang diumumkan dan tidak dapat diganti maupun direset, supaya semua reviewer tetap bisa masuk. Akun demo hanya terdaftar di Banjar demo.
 # 54. PWA
 
 Website/Admin/Portal harus disiapkan sebagai PWA.

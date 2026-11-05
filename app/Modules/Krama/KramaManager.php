@@ -187,6 +187,9 @@ final class KramaManager
                 // Akun portal warga login dengan NIK: NIK baru ikut memperbarui nama pengguna akunnya.
                 if ($userId && DB::table('users')->where('id', $userId)->whereNotNull('nik_hash')->exists()) {
                     $hash = AccountManager::nikHash($data['nik']);
+                    if ($hash !== DB::table('users')->where('id', $userId)->value('nik_hash') && ! AccountManager::onlyIn($userId, $this->tenant->id())) {
+                        $this->fail('nik', 'Akun warga ini juga terdaftar di Banjar lain, jadi NIK login-nya tidak dapat diubah dari sini. Hubungi Bali Santih.');
+                    }
                     if (DB::table('users')->where('nik_hash', $hash)->where('id', '<>', $userId)->exists()) {
                         $this->fail('nik', 'NIK ini sudah dipakai akun warga lain.');
                     }

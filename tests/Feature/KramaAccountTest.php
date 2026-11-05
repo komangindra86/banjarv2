@@ -167,6 +167,43 @@ class KramaAccountTest extends TestCase
 
         app(CurrentBanjar::class)->clear();
         $this->post($this->portal.'/login', ['email' => self::NIK, 'password' => 'Sandi-Saya-2026'])->assertRedirect('/pilih-banjar');
+
+        // Admin Banjar kedua (atau pertama) tidak boleh mereset kata sandi / mengganti NIK login akun yang juga dipakai di
+        // Banjar lain — cukup tahu NIK tidak boleh membuat Admin bisa mengambil alih akun warga Banjar lain.
+        $this->context($other);
+        try {
+            app(AccountManager::class)->resetPassword($otherAdmin, $person);
+            $this->fail('Reset akun lintas Banjar harus ditolak.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('account', $e->errors());
+        }
+        $row = DB::table('krama')->find($person);
+        try {
+            app(KramaManager::class)->person($otherAdmin, $person, ['household_id' => $row->household_id, 'name' => $row->name, 'status' => 'ACTIVE', 'version' => $row->version, 'nik' => '5103010101900099']);
+            $this->fail('Ganti NIK akun lintas Banjar harus ditolak.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('nik', $e->errors());
+        }
+        $this->assertSame(AccountManager::nikHash(self::NIK), $this->warga()->nik_hash);
+        $this->assertTrue(Hash::check('Sandi-Saya-2026', $this->warga()->password));
+        $this->context();
+        $this->expectException(ValidationException::class);
+        app(AccountManager::class)->resetPassword($this->admin, $this->person);
+    }
+
+    public function test_demo_account_password_is_locked(): void
+    {
+        app(AccountManager::class)->activate($this->admin, $this->person);
+        DB::table('users')->where('id', $this->warga()->id)->update(['password' => Hash::make('balisantih'), 'must_change_password' => false, 'password_locked' => true]);
+        app(CurrentBanjar::class)->clear();
+        $this->post($this->portal.'/login', ['email' => self::NIK, 'password' => 'balisantih'])->assertRedirect('/portal/beranda');
+        $this->get($this->portal.'/portal/beranda')->assertOk();
+        $this->get($this->portal.'/akun/kata-sandi')->assertOk()->assertSee('akun demo bersama')->assertDontSee('name="password"', false);
+        $this->post($this->portal.'/akun/kata-sandi', ['current_password' => 'balisantih', 'password' => 'Sandi-Baru-2026', 'password_confirmation' => 'Sandi-Baru-2026'])->assertSessionHasErrors('password');
+        $this->assertTrue(Hash::check('balisantih', $this->warga()->password));
+        $this->context();
+        $this->expectException(ValidationException::class);
+        app(AccountManager::class)->resetPassword($this->admin, $this->person);
     }
 
     public function test_reset_password_only_for_warga_accounts(): void

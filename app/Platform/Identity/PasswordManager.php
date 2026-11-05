@@ -19,6 +19,9 @@ final class PasswordManager
 
     public function change(User $user, array $input): void
     {
+        if ($user->password_locked) {
+            throw ValidationException::withMessages(['password' => 'Ini akun demo bersama; kata sandinya tidak dapat diganti.']);
+        }
         $data = Validator::make($input, [
             'current_password' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'max:255', 'confirmed', Password::min(8)->letters()->numbers(), Rule::notIn([AccountManager::DEFAULT_PASSWORD])],

@@ -34,6 +34,13 @@ final class AccountManager
                 ->join('roles as r', 'r.id', '=', 'a.role_id')->where('m.user_id', $userId)->where('r.code', '<>', 'KRAMA')->exists();
     }
 
+    // Akun yang juga terdaftar di Banjar lain tidak boleh diubah dari Banjar ini (kata sandi, NIK login): Admin satu
+    // Banjar tidak boleh bisa mengambil alih akun warga Banjar lain hanya dengan mengetahui NIK-nya.
+    public static function onlyIn(int $userId, int $banjarId): bool
+    {
+        return ! DB::table('banjar_user_memberships')->where('user_id', $userId)->where('banjar_id', '<>', $banjarId)->exists();
+    }
+
     public function activate(User $actor, int $kramaId): void
     {
         $this->access->authorize($actor, 'krama.configure');
@@ -86,6 +93,12 @@ final class AccountManager
         if (! $krama->user_id || ! self::wargaOnly($krama->user_id)) {
             // Akun pengurus/platform tidak boleh direset dari data krama (mencegah ambil alih akun berhak lebih tinggi).
             $this->fail('Kata sandi akun ini tidak dapat direset dari sini.');
+        }
+        if (! self::onlyIn($krama->user_id, $this->tenant->id())) {
+            $this->fail('Akun ini juga dipakai warga di Banjar lain, jadi kata sandinya tidak dapat direset dari sini. Warga dapat menggantinya sendiri setelah masuk, atau hubungi Bali Santih.');
+        }
+        if (DB::table('users')->where('id', $krama->user_id)->where('password_locked', true)->exists()) {
+            $this->fail('Kata sandi akun demo dikunci dan tidak dapat direset.');
         }
         DB::table('users')->where('id', $krama->user_id)->update(['password' => Hash::make(self::DEFAULT_PASSWORD), 'must_change_password' => true, 'remember_token' => null, 'updated_at' => now()]);
         $this->audit->record($this->tenant->id(), $actor->id, 'krama.account_password_reset', 'krama', $kramaId, [], ['user_id' => $krama->user_id]);
