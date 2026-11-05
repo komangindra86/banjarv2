@@ -5,7 +5,7 @@
     $dateValue = fn ($key) => !empty($item->$key) ? \Carbon\Carbon::parse($item->$key)->timezone('Asia/Makassar')->format('Y-m-d\TH:i') : null;
 @endphp
 <a href="/admin/content/{{ $type }}" class="back-link">← {{ $definition['label'] }}</a>
-<div class="page-heading"><div><span class="eyebrow">{{ $definition['label'] }}</span><h1>{{ $item ? 'Edit informasi' : 'Informasi baru' }}</h1><p class="muted">Isian bertanda * wajib diisi. Semua waktu menggunakan WITA.</p></div></div>
+<div class="page-heading"><div><span class="eyebrow">{{ $definition['label'] }}</span><h1>{{ $item ? 'Edit informasi' : 'Informasi baru' }}</h1><p class="muted">{{ $definition['hint'] }}</p><p class="muted mt-2">Isian bertanda * wajib diisi.@if($type === 'agenda') Semua waktu menggunakan WITA.@endif</p></div></div>
 <form action="/admin/content/{{ $type }}{{ $item ? '/'.$item->id : '' }}" method="post" enctype="multipart/form-data" class="card form-stack form-width" data-saving>@csrf @if($item) @method('PATCH') @endif
 <x-editor-field name="title" :label="$type === 'pengurus' ? 'Nama pengurus' : 'Judul'" :value="$item->title ?? null" required />
 @if($type === 'pengurus')

@@ -150,6 +150,16 @@ class WebsiteTest extends TestCase
         $this->get($this->host.'/dokumen')->assertOk()->assertSee('Awig-awig, pararem')->assertDontSee('Dokumen publik');
         $this->login();
         $this->get($this->host.'/admin/website')->assertOk()->assertSee('Awig-awig, pararem')->assertDontSee('Dokumen publik')->assertDontSee('kabar');
+        // Setiap jenis konten memberi tahu pengurus apa yang diposting di sana, di kartu, daftar, dan formulir.
+        $hub = $this->get($this->host.'/admin/website');
+        foreach (ContentCatalog::TYPES as $type => $definition) {
+            if ($type !== 'agenda') {
+                $hub->assertSee($definition['hint']);
+            }
+            $this->get($this->host.'/admin/content/'.$type)->assertOk()->assertSee($definition['hint']);
+            $this->get($this->host.'/admin/content/'.$type.'/create')->assertOk()->assertSee($definition['hint']);
+        }
+        $this->get($this->host.'/berita')->assertOk()->assertSee(ContentCatalog::TYPES['berita']['lead']);
     }
 
     public function test_public_pages_show_only_current_tenant_and_escape_content(): void

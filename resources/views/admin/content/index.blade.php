@@ -2,7 +2,7 @@
 @section('title', $definition['label'])
 @section('content')
 <a href="{{ $type === 'agenda' ? '/admin' : '/admin/website' }}" class="back-link">← Kembali</a>
-<div class="page-heading"><div><span class="eyebrow">KELOLA INFORMASI</span><h1>{{ $definition['label'] }}</h1><p class="muted">Simpan draf, jadwalkan terbit, atau arsipkan informasi.</p></div><a class="button" href="/admin/content/{{ $type }}/create">+ Tambah {{ strtolower($definition['label']) }}</a></div>
+<div class="page-heading"><div><span class="eyebrow">KELOLA INFORMASI</span><h1>{{ $definition['label'] }}</h1><p class="muted">{{ $definition['hint'] }}</p></div><a class="button" href="/admin/content/{{ $type }}/create">+ Tambah {{ strtolower($definition['label']) }}</a></div>
 <form class="search-form" method="get"><label class="grow"><span class="sr-only">Cari judul</span><input name="q" value="{{ $search }}" placeholder="Cari judul…"></label><button class="button-secondary">Cari</button></form>
 <div class="card-grid">@forelse($items as $item)
 <article class="card"><span class="badge {{ $item->status !== 'PUBLISHED' ? 'badge-muted' : '' }}">{{ ['DRAFT'=>'Draf','PUBLISHED'=>'Terbit','ARCHIVED'=>'Diarsipkan'][$item->status] }}{{ $item->status === 'PUBLISHED' && $item->published_at > now() ? ' · Terjadwal' : '' }}</span>

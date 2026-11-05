@@ -407,6 +407,8 @@ Website publik minimal mendukung:
 
 Satu nama untuk satu hal, sama di menu pengurus dan website: Pengumuman (bukan "Kabar"), Berita (bukan "Berita & dokumentasi"; foto kegiatan ada di Galeri), Kegiatan (bukan "Agenda"), Dokumen (bukan "Dokumen publik"). Alamat halaman tetap (`/pengumuman`, `/berita`, `/agenda`, `/dokumen`) agar tautan lama tidak rusak.
 
+Setiap jenis konten punya petunjuk "isi apa di sini" untuk pengurus (kartu Konten, halaman daftar, formulir) dan kalimat pembuka di website, keduanya di `ContentCatalog`. Pembeda utama: Pengumuman = info yang perlu segera diketahui (undangan paruman, berita duka, perubahan jadwal), boleh diberi batas berlaku lalu pindah ke Riwayat; Berita = tulisan yang tetap tersimpan seperti blog (cerita kegiatan, sejarah, tradisi) beserta foto, tanpa batas berlaku; Kegiatan = jadwal yang akan datang; Galeri = kumpulan foto tanpa tulisan panjang; Layanan = cara mengurus keperluan di Banjar; Dokumen = awig-awig, pararem, laporan, formulir.
+
 Navigation harus tetap sederhana.
 
 Jangan tampilkan terlalu banyak menu sekaligus.
