@@ -6,7 +6,7 @@
 @if($summary['TOTAL'])<div class="stats-grid stats-grid-4 mb-6">@foreach(['TOTAL' => 'Peserta', 'HADIR' => 'Hadir', 'IZIN' => 'Izin/sakit', 'TIDAK_HADIR' => 'Tidak hadir'] as $key => $label)<section class="card"><h2>{{ $label }}</h2><p class="stat-number">{{ $key === 'IZIN' ? $summary['IZIN'] + $summary['SAKIT'] : $summary[$key] }}</p></section>@endforeach</div>@endif
 <div class="grid gap-5 lg:grid-cols-2">
 <div class="grid gap-5 self-start">
-<section class="card"><h2>Informasi kegiatan</h2><p class="muted mt-2">Judul, waktu, tempat, dan publikasi diubah melalui agenda.</p>@if($canManage)<a class="button-secondary mt-4" href="/admin/content/agenda/{{ $activity->id }}/edit">Edit agenda</a>@endif</section>
+<section class="card"><h2>Informasi kegiatan</h2><p class="muted mt-2">Judul, waktu, tempat, dan foto diubah melalui tombol di bawah.</p>@if($canManage)<a class="button-secondary mt-4" href="/admin/content/agenda/{{ $activity->id }}/edit">Edit kegiatan</a>@endif</section>
 @if($canManage)
 <form class="card form-stack" method="post" action="/admin/activities/{{ $activity->id }}/settings">@csrf @method('PATCH')<h2>Pengaturan presensi</h2>
 <label>Jenis kegiatan<select name="kind" @disabled($locked)>@foreach(\App\Modules\Activity\ActivityManager::KINDS as $k => $l)<option value="{{ $k }}" @selected($activity->kind === $k)>{{ $l }}</option>@endforeach</select></label>

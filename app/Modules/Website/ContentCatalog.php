@@ -2,15 +2,16 @@
 
 namespace App\Modules\Website;
 
+// Nama jenis konten sama di menu pengurus dan website (§12): Pengumuman, Berita, Kegiatan, Dokumen, dst.
 final class ContentCatalog
 {
     public const TYPES = [
         'pengumuman' => ['table' => 'announcements', 'label' => 'Pengumuman'],
         'berita' => ['table' => 'news_posts', 'label' => 'Berita'],
-        'agenda' => ['table' => 'activities', 'label' => 'Agenda'],
+        'agenda' => ['table' => 'activities', 'label' => 'Kegiatan'],
         'pengurus' => ['table' => 'public_officials', 'label' => 'Pengurus'],
         'layanan' => ['table' => 'service_definitions', 'label' => 'Layanan'],
-        'dokumen' => ['table' => 'public_documents', 'label' => 'Dokumen publik'],
+        'dokumen' => ['table' => 'public_documents', 'label' => 'Dokumen'],
         'galeri' => ['table' => 'galleries', 'label' => 'Galeri'],
     ];
 

@@ -137,6 +137,21 @@ class WebsiteTest extends TestCase
         $this->assertDatabaseMissing('news_posts', ['title' => 'Salah berkas']);
     }
 
+    // §12: satu nama untuk satu hal, sama di website dan menu pengurus.
+    public function test_website_and_admin_use_the_same_content_names(): void
+    {
+        $home = $this->get($this->host.'/')->assertOk();
+        foreach (['>Pengumuman</a>', '>Kegiatan</a>', '>Berita</a>', '>Dokumen</a>'] as $label) {
+            $home->assertSee($label, false);
+        }
+        foreach (['Kabar', 'Berita & dokumentasi', 'Dokumen publik', 'Agenda terdekat'] as $old) {
+            $home->assertDontSee($old);
+        }
+        $this->get($this->host.'/dokumen')->assertOk()->assertSee('Awig-awig, pararem')->assertDontSee('Dokumen publik');
+        $this->login();
+        $this->get($this->host.'/admin/website')->assertOk()->assertSee('Awig-awig, pararem')->assertDontSee('Dokumen publik')->assertDontSee('kabar');
+    }
+
     public function test_public_pages_show_only_current_tenant_and_escape_content(): void
     {
         $this->content('pengumuman', ['title' => 'Kabar Alpha', 'body' => '<script>alert(1)</script>']);

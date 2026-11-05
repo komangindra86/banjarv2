@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('title', 'Tambah Banjar')
 @section('content')
-<a class="back-link" href="/platform">← Daftar Banjar</a><div class="page-heading"><div><h1>Tambahkan Banjar</h1><p class="muted">Website dan agenda dasar akan aktif sejak awal.</p></div></div>
+<a class="back-link" href="/platform">← Daftar Banjar</a><div class="page-heading"><div><h1>Tambahkan Banjar</h1><p class="muted">Website dan kegiatan dasar akan aktif sejak awal.</p></div></div>
 <form action="/platform/banjars" method="post" class="card form-stack form-width">@csrf
     <h2>Identitas Banjar</h2><label>Nama Banjar<input name="name" value="{{ old('name') }}" required maxlength="150" placeholder="Banjar Biaung"></label>
     <label>Subdomain<input name="slug" value="{{ old('slug') }}" required maxlength="63" pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="biaung"><span class="help">Alamat: subdomain.{{ config('platform.tenant_base_domain') }}</span></label>

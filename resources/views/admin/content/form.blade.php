@@ -24,7 +24,7 @@
 <x-editor-field name="contact" label="Kontak layanan" :value="$item->contact ?? null" />
 @endif
 @if($type === 'dokumen')
-<x-photo-picker name="document" label="Berkas dokumen" :files="$files" documents help="PDF atau foto, maksimal 10 MB." />
+<x-photo-picker name="document" label="Berkas dokumen" :files="$files" documents help="Misalnya awig-awig, pararem, laporan, atau formulir. PDF atau foto, maksimal 10 MB." />
 @else
 <x-photo-picker name="photos" label="Foto" :files="$files" multiple cover />
 @endif

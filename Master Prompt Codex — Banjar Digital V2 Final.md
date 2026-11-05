@@ -398,12 +398,14 @@ Website publik minimal mendukung:
 - Profil Banjar
 - Struktur Pengurus
 - Pengumuman
-- Agenda/Kegiatan
-- Berita & Dokumentasi
+- Kegiatan
+- Berita
 - Informasi Layanan
-- Dokumen Publik
+- Dokumen (awig-awig, pararem, laporan, formulir; terbuka untuk publik)
 - Galeri
 - Kontak & Lokasi
+
+Satu nama untuk satu hal, sama di menu pengurus dan website: Pengumuman (bukan "Kabar"), Berita (bukan "Berita & dokumentasi"; foto kegiatan ada di Galeri), Kegiatan (bukan "Agenda"), Dokumen (bukan "Dokumen publik"). Alamat halaman tetap (`/pengumuman`, `/berita`, `/agenda`, `/dokumen`) agar tautan lama tidak rusak.
 
 Navigation harus tetap sederhana.
 

@@ -14,7 +14,7 @@
     <div>
         <span class="eyebrow">Om Swastiastu · Selamat datang</span>
         <h1>{!! $headline !!}</h1>
-        <p class="hero-lead">{{ $profile->tagline ?? 'Kabar, kegiatan, dan layanan Banjar dalam satu tempat.' }}</p>
+        <p class="hero-lead">{{ $profile->tagline ?? 'Pengumuman, kegiatan, dan layanan Banjar dalam satu tempat.' }}</p>
         <div class="hero-actions"><a href="/pengumuman" class="button">Lihat pengumuman</a><a href="/profil" class="button-secondary">Mengenal Banjar</a></div>
     </div>
 </div>
@@ -35,8 +35,8 @@
 
 @if($showActivity)
 <section class="agenda-band bleed"><div class="p-wrap">
-<div class="section-head"><div><span class="eyebrow">Catat waktunya</span><h2>Agenda terdekat</h2><p>Paruman, ngayah, dan kegiatan bersama krama Banjar.</p></div><a class="section-link" href="/agenda">Semua agenda <span aria-hidden="true">→</span></a></div>
-<div class="agenda-list">@forelse($activities as $entry)@php $at = \Carbon\Carbon::parse($entry->starts_at)->timezone('Asia/Makassar'); @endphp<a href="/agenda/{{ $entry->slug }}" class="agenda-row"><time datetime="{{ $entry->starts_at }}"><strong>{{ $at->format('d') }}</strong><span>{{ $at->translatedFormat('M Y') }}</span></time><div><h3>{{ $entry->title }}</h3><p>{{ $at->translatedFormat('l') }} · {{ $at->format('H:i') }} WITA{{ $entry->location ? ' · '.$entry->location : '' }}</p></div><span aria-hidden="true">→</span></a>@empty<div class="public-empty"><h3>Belum ada agenda mendatang</h3><p>Jadwal kegiatan berikutnya akan diumumkan di sini.</p></div>@endforelse</div>
+<div class="section-head"><div><span class="eyebrow">Catat waktunya</span><h2>Kegiatan terdekat</h2><p>Paruman, ngayah, dan kegiatan bersama krama Banjar.</p></div><a class="section-link" href="/agenda">Semua kegiatan <span aria-hidden="true">→</span></a></div>
+<div class="agenda-list">@forelse($activities as $entry)@php $at = \Carbon\Carbon::parse($entry->starts_at)->timezone('Asia/Makassar'); @endphp<a href="/agenda/{{ $entry->slug }}" class="agenda-row"><time datetime="{{ $entry->starts_at }}"><strong>{{ $at->format('d') }}</strong><span>{{ $at->translatedFormat('M Y') }}</span></time><div><h3>{{ $entry->title }}</h3><p>{{ $at->translatedFormat('l') }} · {{ $at->format('H:i') }} WITA{{ $entry->location ? ' · '.$entry->location : '' }}</p></div><span aria-hidden="true">→</span></a>@empty<div class="public-empty"><h3>Belum ada kegiatan mendatang</h3><p>Jadwal kegiatan berikutnya akan diumumkan di sini.</p></div>@endforelse</div>
 </div></section>
 @endif
 
@@ -47,14 +47,14 @@
 </section>
 
 <section class="public-section">
-<div class="section-head"><div><span class="eyebrow">Cerita dari Banjar</span><h2>Berita & dokumentasi</h2></div><a href="/berita" class="section-link">Semua berita <span aria-hidden="true">→</span></a></div>
+<div class="section-head"><div><span class="eyebrow">Cerita dari Banjar</span><h2>Berita</h2></div><a href="/berita" class="section-link">Semua berita <span aria-hidden="true">→</span></a></div>
 @if($news->isNotEmpty())
 <div class="news-grid">
 @php $lead = $news->first(); $leadPicture = $publicContent->image($lead->media_id); @endphp
 <article @class(['public-card', 'is-text' => ! $leadPicture])>@if($leadPicture)<a class="card-media" href="/berita/{{ $lead->slug }}" tabindex="-1" aria-hidden="true"><img src="{{ $leadPicture }}" alt="" loading="lazy" width="900" height="675"></a>@endif<div class="public-card-body"><p class="card-meta">{{ \Carbon\Carbon::parse($lead->published_at)->timezone('Asia/Makassar')->translatedFormat('d F Y') }}</p><h3><a href="/berita/{{ $lead->slug }}">{{ $lead->title }}</a></h3>@if($lead->body)<p class="excerpt">{{ \Illuminate\Support\Str::limit($lead->body, 220) }}</p>@endif<a class="public-read" href="/berita/{{ $lead->slug }}">Baca cerita <span aria-hidden="true">→</span></a></div></article>
 <div class="news-side">@foreach($news->slice(1) as $entry)@php $pic = $publicContent->image($entry->media_id); @endphp<article class="public-card">@if($pic)<a class="card-media" href="/berita/{{ $entry->slug }}" tabindex="-1" aria-hidden="true"><img src="{{ $pic }}" alt="" loading="lazy" width="300" height="300"></a>@endif<div class="public-card-body"><p class="card-meta">{{ \Carbon\Carbon::parse($entry->published_at)->timezone('Asia/Makassar')->translatedFormat('d F Y') }}</p><h3><a href="/berita/{{ $entry->slug }}">{{ $entry->title }}</a></h3><a class="public-read" href="/berita/{{ $entry->slug }}">Selengkapnya <span aria-hidden="true">→</span></a></div></article>@endforeach</div>
 </div>
-@else<div class="public-empty"><h3>Belum ada berita terbit</h3><p>Cerita dan dokumentasi kegiatan akan ditampilkan di sini.</p></div>@endif
+@else<div class="public-empty"><h3>Belum ada berita terbit</h3><p>Cerita kegiatan Banjar akan ditampilkan di sini.</p></div>@endif
 </section>
 
 @include('public.contact')

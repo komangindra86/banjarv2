@@ -24,13 +24,13 @@
 <div class="public-strip"><div><span>Om Swastiastu</span><a href="/login">Masuk pengurus →</a></div></div>
 <header class="public-header"><div class="public-header-inner">
 <a class="brand" href="/" aria-label="{{ $currentBanjar->name }}, beranda"><img src="{{ $siteLogo ?? '/images/balisantih-logo.png' }}" alt="" class="public-logo"><span class="brand-name">{{ $currentBanjar->name }}<small>Banjar Adat · Bali</small></span></a>
-<nav aria-label="Navigasi publik" class="public-nav">@foreach(['/' => 'Beranda', '/pengumuman' => 'Kabar', '/agenda' => 'Agenda', '/layanan' => 'Layanan', '/profil' => 'Profil'] as $url => $label)@if($url !== '/agenda' || $gate->allows('ACTIVITY'))<a href="{{ $url }}" @if(request()->getPathInfo() === $url || ($url !== '/' && str_starts_with(request()->getPathInfo(), $url.'/'))) aria-current="page" @endif>{{ $label }}</a>@endif @endforeach</nav>
+<nav aria-label="Navigasi publik" class="public-nav">@foreach(['/' => 'Beranda', '/pengumuman' => 'Pengumuman', '/agenda' => 'Kegiatan', '/layanan' => 'Layanan', '/profil' => 'Profil'] as $url => $label)@if($url !== '/agenda' || $gate->allows('ACTIVITY'))<a href="{{ $url }}" @if(request()->getPathInfo() === $url || ($url !== '/' && str_starts_with(request()->getPathInfo(), $url.'/'))) aria-current="page" @endif>{{ $label }}</a>@endif @endforeach</nav>
 </div></header>
 <main id="main" class="public-main">@yield('content')</main>
 <footer class="public-footer"><div class="lattice" aria-hidden="true"></div>
 <div class="footer-grid">
-<div class="footer-brand"><strong>{{ $currentBanjar->name }}</strong><p>{{ $profile->tagline ?? 'Kabar, kegiatan, dan layanan Banjar dalam satu tempat.' }}</p></div>
-<div><h2>Jelajahi</h2><nav aria-label="Informasi lainnya"><a href="/pengumuman">Pengumuman</a><a href="/berita">Berita & dokumentasi</a><a href="/galeri">Galeri</a><a href="/dokumen">Dokumen publik</a><a href="/layanan">Informasi layanan</a></nav></div>
+<div class="footer-brand"><strong>{{ $currentBanjar->name }}</strong><p>{{ $profile->tagline ?? 'Pengumuman, kegiatan, dan layanan Banjar dalam satu tempat.' }}</p></div>
+<div><h2>Jelajahi</h2><nav aria-label="Informasi lainnya"><a href="/pengumuman">Pengumuman</a><a href="/berita">Berita</a><a href="/galeri">Galeri</a><a href="/dokumen">Dokumen</a><a href="/layanan">Informasi layanan</a></nav></div>
 <div class="footer-contact"><h2>Kontak</h2>@if($profile->address ?? null)<p>{{ $profile->address }}</p>@endif @if($profile->phone ?? null)<a href="tel:{{ preg_replace('/[^+0-9]/', '', $profile->phone) }}">{{ $profile->phone }}</a>@endif @if($profile->email ?? null)<a class="break-all" href="mailto:{{ $profile->email }}">{{ $profile->email }}</a>@endif <a href="/profil#kontak">Lokasi & kontak lengkap →</a></div>
 </div>
 <div class="footer-bottom"><span>Rahayu, Om Shanti Shanti Shanti Om</span><span>Banjar Digital oleh PT Bali Santih Digital</span></div>
