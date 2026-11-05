@@ -175,8 +175,7 @@ final class ActivityController extends Controller
         return view('activity.minutes', $this->flags($request) + ['activity' => $activity,
             'minutes' => $this->query->table('activity_minutes')->where('activity_id', $id)->first(),
             'decisions' => $this->query->table('activity_decisions')->where('activity_id', $id)->orderBy('sort_order')->get(),
-            'attachments' => $this->query->table('activity_attachments')->where('activity_attachments.activity_id', $id)->join('media_files as m', 'm.id', '=', 'activity_attachments.media_id')->get(['activity_attachments.id', 'm.name', 'm.mime', 'm.size']),
-            'media' => $this->query->table('media_files')->orderByDesc('id')->limit(100)->get(['id', 'name', 'visibility'])]);
+            'attachments' => $this->query->table('activity_attachments')->where('activity_attachments.activity_id', $id)->join('media_files as m', 'm.id', '=', 'activity_attachments.media_id')->get(['activity_attachments.id', 'm.name', 'm.mime', 'm.size'])]);
     }
 
     public function saveMinutes(Request $request, int $id, MinutesManager $manager)
@@ -188,9 +187,9 @@ final class ActivityController extends Controller
 
     public function attach(Request $request, int $id, MinutesManager $manager)
     {
-        $manager->attach($request->user(), $id, $request->only('media_id'));
+        $count = $manager->attach($request->user(), $id, $request->file('files'));
 
-        return back()->with('success', 'Lampiran ditambahkan.');
+        return back()->with('success', $count.' lampiran ditambahkan.');
     }
 
     public function detach(Request $request, int $id, int $attachment, MinutesManager $manager)

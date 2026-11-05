@@ -567,6 +567,15 @@ Logo Banjar (Profil website, media berstatus Publik) menggantikan tanda huruf "B
 
 Logo yang sama dipakai saat tautan dibagikan dan saat aplikasi dipasang: pratinjau WhatsApp/Facebook (`og:image`) memakai logo Banjar dalam JPEG 1200×630, untuk semua halaman website publik termasuk berita yang berfoto; ikon aplikasi (manifest PWA, ikon layar utama iOS, favicon) memakai PNG persegi 192/512/180 plus varian maskable. Berkas dibuat otomatis dari logo (tepi kosong dipotong, latar putih) dan disimpan per media logo; mengganti logo = berkas baru. Di portal pusat, aplikasi yang dipasang setelah warga masuk memakai nama dan logo Banjar warga tersebut; sebelum masuk, identitasnya umum (Portal Krama · Bali Santih).
 
+Unggah foto di semua formulir (konten website, Profil, Semua foto & berkas, lampiran notulen) memakai satu cara: tombol **Pilih foto** langsung membuka galeri HP/komputer, bisa memilih beberapa foto sekaligus, foto langsung tampil sebagai pratinjau dengan tombol **Hapus**, dan ikut tersimpan saat formulir disimpan. Tidak ada dialog unggah terpisah dan tidak ada pilihan Publik/Privat:
+- Foto konten website, logo, dan sampul otomatis Publik, tetapi pengunjung tetap hanya bisa membuka foto yang dipasang pada konten terbit (atau logo/sampul). Foto Privat lama yang dipasang lewat formulir menjadi Publik.
+- Lampiran notulen otomatis Privat (hanya pengurus).
+- Konten (selain Dokumen) bisa berisi banyak foto (maks. 50); foto pertama = foto utama (`media_id`, dipakai kartu dan pratinjau), sisanya tampil di bawah isi halaman. Galeri memakai `gallery_items`, konten lain `content_photos`. Logo, sampul, dan berkas Dokumen tetap satu berkas.
+- Foto diperkecil di browser (sisi terpanjang 1600 px) sebelum dikirim, dan di server dibatasi 2000 px lalu disimpan WebP. Satu kali simpan maks. 20 berkas (batas server 22 MB).
+- Semua foto yang diunggah otomatis masuk halaman **Semua foto & berkas**.
+- Bila isian lain salah (mis. judul kosong), foto yang sudah terunggah tetap tampil di formulir, tidak perlu dipilih ulang.
+- Setelah menyimpan konten, pengurus kembali ke daftar konten jenis itu; setelah menyimpan Profil, kembali ke Konten website.
+
 Profil website menyediakan tombol **Pakai contoh kalimat** untuk Kalimat pembuka, Tentang Banjar, dan Sejarah (`ContentManager::profileTemplates`); teks dalam [kurung] wajib diganti pengurus.
 
 Lokasi Banjar cukup **satu tautan Google Maps** (`website_profiles.maps_url`; hanya https dari maps.app.goo.gl, goo.gl/maps, google.<tld>/maps, maps.google.<tld>), bukan lintang/bujur. Koordinat lama otomatis dijadikan tautan.

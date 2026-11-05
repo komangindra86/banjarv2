@@ -3,18 +3,18 @@
 namespace App\Modules\Activity;
 
 use App\Models\User;
+use App\Modules\Website\MediaManager;
 use App\Platform\Audit\Audit;
 use App\Platform\Tenancy\CurrentBanjar;
 use App\Platform\Tenancy\TenantQuery;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 // Paruman/rapat notes on the same activity: agenda, notulen, keputusan, lampiran. Final minutes are immutable.
 final class MinutesManager
 {
-    public function __construct(private ActivityAccess $access, private TenantQuery $query, private CurrentBanjar $tenant, private Audit $audit) {}
+    public function __construct(private ActivityAccess $access, private TenantQuery $query, private CurrentBanjar $tenant, private Audit $audit, private MediaManager $media) {}
 
     private function write(User $actor, int $id, callable $work): void
     {
@@ -51,13 +51,24 @@ final class MinutesManager
         });
     }
 
-    public function attach(User $actor, int $id, array $input): void
+    // §58: lampiran dipilih langsung di halaman notulen (bisa beberapa sekaligus), disimpan Privat karena hanya
+    // untuk pengurus. Izin dan status final diperiksa sebelum berkas disimpan.
+    public function attach(User $actor, int $id, mixed $files): int
     {
-        $data = Validator::make($input, ['media_id' => ['required', 'integer', Rule::exists('media_files', 'id')->where('banjar_id', $this->tenant->id())]], [], ['media_id' => 'lampiran'])->validate();
-        $this->write($actor, $id, function (object $activity) use ($actor, $data) {
-            DB::table('activity_attachments')->insertOrIgnore(['banjar_id' => $this->tenant->id(), 'activity_id' => $activity->id, 'media_id' => $data['media_id'], 'created_at' => now(), 'updated_at' => now()]);
-            $this->audit->record($this->tenant->id(), $actor->id, 'minutes.attachment_added', 'activities', $activity->id);
+        $this->access->activity($actor, $id, 'activity.manage');
+        abort_if($this->query->table('activity_minutes')->where('activity_id', $id)->value('status') === 'FINAL', 409, 'Notulen sudah final dan tidak dapat diubah.');
+        $media = $this->media->storeMany($actor, $files, 'files', true, 'PRIVATE');
+        if (! $media) {
+            throw ValidationException::withMessages(['files' => 'Pilih minimal satu foto atau berkas PDF.']);
+        }
+        $this->write($actor, $id, function (object $activity) use ($actor, $media) {
+            foreach ($media as $mediaId) {
+                DB::table('activity_attachments')->insertOrIgnore(['banjar_id' => $this->tenant->id(), 'activity_id' => $activity->id, 'media_id' => $mediaId, 'created_at' => now(), 'updated_at' => now()]);
+            }
+            $this->audit->record($this->tenant->id(), $actor->id, 'minutes.attachment_added', 'activities', $activity->id, [], ['amount' => count($media)]);
         });
+
+        return count($media);
     }
 
     public function detach(User $actor, int $id, int $attachmentId): void

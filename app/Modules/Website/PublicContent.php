@@ -55,6 +55,12 @@ final class PublicContent
             }
         }
 
+        foreach ($this->query->table('content_photos')->where('media_id', $id)->get(['content_type', 'content_id']) as $photo) {
+            if (isset(ContentCatalog::TYPES[$photo->content_type]) && $this->published($photo->content_type, false)->where('id', $photo->content_id)->exists()) {
+                return true;
+            }
+        }
+
         return $this->query->table('gallery_items')->where('media_id', $id)
             ->whereIn('gallery_id', $this->published('galeri')->select('galleries.id'))->exists();
     }

@@ -76,7 +76,6 @@ final class ContentManager
             'body' => ['nullable', 'string', 'max:50000'],
             'status' => ['required', Rule::in(['DRAFT', 'PUBLISHED', 'ARCHIVED'])],
             'published_at' => ['nullable', 'date'],
-            'media_id' => ['nullable', 'integer', $this->mediaRule($type !== 'dokumen')],
         ];
         if ($type === 'pengumuman') {
             $rules += ['priority' => ['required', Rule::in(['NORMAL', 'IMPORTANT'])], 'expires_at' => ['nullable', 'date', 'after:published_at'], 'related_activity_id' => ['nullable', 'integer', Rule::exists('activities', 'id')->where('banjar_id', $this->tenant->id())]];
@@ -90,21 +89,25 @@ final class ContentManager
         if ($type === 'layanan') {
             $rules += ['requirements' => ['nullable', 'string', 'max:10000'], 'procedure' => ['nullable', 'string', 'max:10000'], 'contact' => ['nullable', 'string', 'max:255']];
         }
-        if ($type === 'galeri') {
-            $rules += ['gallery_media' => ['nullable', 'array', 'max:50'], 'gallery_media.*' => ['integer', 'distinct', $this->mediaRule()]];
-        }
+        // Foto (atau berkas dokumen) = berkas lama yang dipertahankan + unggahan baru, berurutan; yang pertama
+        // menjadi foto utama (media_id). Berkas unggahan sudah disimpan oleh controller lewat MediaManager.
+        $document = $type === 'dokumen';
+        $field = $document ? 'document' : 'photos';
+        $input[$field] = array_values(array_filter((array) ($input['keep_'.$field] ?? []), fn ($id) => $id !== null && $id !== ''));
+        $rules += [$field => ['array', 'max:'.($document ? 1 : 50)], $field.'.*' => ['integer', 'distinct', $this->mediaRule(! $document)]];
         // A blank publication date means publish now; timezone matches form labels (WITA).
         $input['published_at'] = ($input['published_at'] ?? null) ?: now()->timezone('Asia/Makassar')->toDateTimeString();
-        $data = Validator::make($input, $rules)->validate();
-        $gallery = $data['gallery_media'] ?? [];
-        unset($data['gallery_media']);
+        $data = Validator::make($input, $rules, [$field.'.max' => 'Paling banyak 50 foto untuk satu konten.'])->validate();
+        $photos = array_map('intval', $data[$field]);
+        unset($data[$field]);
+        $data['media_id'] = $photos[0] ?? null;
         foreach (['published_at', 'expires_at', 'starts_at', 'ends_at'] as $date) {
             if (! empty($data[$date])) {
                 $data[$date] = Carbon::parse($data[$date], 'Asia/Makassar')->utc()->format('Y-m-d H:i:s');
             }
         }
 
-        return DB::transaction(function () use ($definition, $actor, $id, $data, $gallery, $type) {
+        return DB::transaction(function () use ($definition, $actor, $id, $data, $photos, $type) {
             $old = $id ? $this->query->table($definition['table'])->where('id', $id)->lockForUpdate()->first() : null;
             abort_if($id && ! $old, 404);
             if ($id) {
@@ -113,16 +116,41 @@ final class ContentManager
                 $data['slug'] = $this->slug($definition['table'], $data['title'], $type);
                 $id = DB::table($definition['table'])->insertGetId($data + ['banjar_id' => $this->tenant->id(), 'created_at' => now(), 'updated_at' => now()]);
             }
-            if ($type === 'galeri') {
-                $this->query->table('gallery_items')->where('gallery_id', $id)->delete();
-                foreach ($gallery as $order => $media) {
-                    DB::table('gallery_items')->insert(['banjar_id' => $this->tenant->id(), 'gallery_id' => $id, 'media_id' => $media, 'sort_order' => $order]);
-                }
-            }
-            $this->audit->record($this->tenant->id(), $actor->id, $old ? 'content.updated' : 'content.created', $definition['table'], $id, (array) $old, $data);
+            $this->syncPhotos($type, $id, $photos);
+            $this->audit->record($this->tenant->id(), $actor->id, $old ? 'content.updated' : 'content.created', $definition['table'], $id, (array) $old, $data + ['photos' => $photos]);
 
             return $id;
         });
+    }
+
+    /** Foto konten berurutan; konten lama yang hanya punya foto utama tetap menampilkan foto itu. @return list<int> */
+    public function photoIds(string $type, int $id): array
+    {
+        $definition = ContentCatalog::get($type);
+        $main = $this->query->table($definition['table'])->where('id', $id)->value('media_id');
+        $ids = match ($type) {
+            'dokumen' => [],
+            'galeri' => $this->query->table('gallery_items')->where('gallery_id', $id)->orderBy('sort_order')->orderBy('id')->pluck('media_id')->all(),
+            default => $this->query->table('content_photos')->where('content_type', $type)->where('content_id', $id)->orderBy('sort_order')->orderBy('id')->pluck('media_id')->all(),
+        };
+
+        return array_values(array_unique(array_map('intval', $main ? [$main, ...$ids] : $ids)));
+    }
+
+    private function syncPhotos(string $type, int $id, array $photos): void
+    {
+        // Foto yang dipasang pada konten memang untuk website; berkas Privat lama otomatis menjadi Publik.
+        if ($photos) {
+            $this->query->table('media_files')->whereIn('id', $photos)->where('visibility', 'PRIVATE')->update(['visibility' => 'PUBLIC', 'updated_at' => now()]);
+        }
+        if ($type === 'dokumen') {
+            return;
+        }
+        [$table, $key, $extra] = $type === 'galeri' ? ['gallery_items', 'gallery_id', []] : ['content_photos', 'content_id', ['content_type' => $type]];
+        $this->query->table($table)->where($key, $id)->where($extra)->delete();
+        foreach ($photos as $order => $media) {
+            DB::table($table)->insert(['banjar_id' => $this->tenant->id(), $key => $id, 'media_id' => $media, 'sort_order' => $order] + $extra);
+        }
     }
 
     // Alamat dari judul ("Sangkep Rutin" → sangkep-rutin), diberi nomor bila kembar. Tidak ikut berubah saat judul
@@ -164,6 +192,11 @@ final class ContentManager
             'logo_id' => ['nullable', 'integer', $this->mediaRule()], 'cover_id' => ['nullable', 'integer', $this->mediaRule()],
         ])->validate();
         DB::transaction(function () use ($actor, $data) {
+            // Logo dan sampul selalu untuk tampilan publik (tanpa pilihan Publik/Privat).
+            $photos = array_filter([$data['logo_id'] ?? null, $data['cover_id'] ?? null]);
+            if ($photos) {
+                $this->query->table('media_files')->whereIn('id', $photos)->update(['visibility' => 'PUBLIC', 'updated_at' => now()]);
+            }
             DB::table('website_profiles')->updateOrInsert(['banjar_id' => $this->tenant->id()], $data + ['updated_at' => now()]);
             $this->audit->record($this->tenant->id(), $actor->id, 'profile.updated', 'website_profiles', $this->tenant->id());
         });

@@ -249,7 +249,6 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
         Route::patch('/profile', [WebsiteAdminController::class, 'updateProfile']);
         Route::get('/media', [WebsiteAdminController::class, 'media']);
         Route::post('/media', [WebsiteAdminController::class, 'upload']);
-        Route::patch('/media/{id}', [WebsiteAdminController::class, 'visibility'])->whereNumber('id');
         Route::get('/media/{id}/download', [WebsiteAdminController::class, 'download'])->whereNumber('id');
         Route::get('/qr', [WebsiteAdminController::class, 'qr']);
     });

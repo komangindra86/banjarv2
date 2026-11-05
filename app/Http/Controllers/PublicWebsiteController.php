@@ -67,7 +67,12 @@ final class PublicWebsiteController extends Controller
         abort_unless($this->tenant->optional(), 404);
         $item = $this->public->published($type, false)->where('slug', $slug)->first();
         abort_unless($item, 404);
-        $photos = $type === 'galeri' ? $this->query->table('gallery_items')->where('gallery_id', $item->id)->orderBy('sort_order')->get() : collect();
+        // Galeri menampilkan semua fotonya; konten lain menampilkan foto utama besar lalu foto lainnya di bawah isi.
+        $photos = match ($type) {
+            'galeri' => $this->query->table('gallery_items')->where('gallery_id', $item->id)->orderBy('sort_order')->get(),
+            'dokumen' => collect(),
+            default => $this->query->table('content_photos')->where('content_type', $type)->where('content_id', $item->id)->where('media_id', '!=', $item->media_id ?? 0)->orderBy('sort_order')->get(),
+        };
         $related = $type === 'pengumuman' && $item->related_activity_id ? $this->public->published('agenda')->where('id', $item->related_activity_id)->first() : null;
         $document = $type === 'dokumen' && $item->media_id ? $this->query->table('media_files')->where('id', $item->media_id)->where('visibility', 'PUBLIC')->first() : null;
 

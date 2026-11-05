@@ -162,3 +162,23 @@ a.history-row:hover { background: #fffaf5; }
 .template-swatches span { flex: 1; }
 /* Profil website: tombol "Pakai contoh kalimat" kecil di bawah kolomnya, bukan selebar form. */
 .template-fill { justify-self: start; margin-top: -8px; color: var(--ui-accent); }
+/* Pemilih foto (komponen photo-picker): pratinjau langsung, tombol besar untuk pengurus lanjut usia (§58.1). */
+.photo-picker { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; min-width: 0; }
+.photo-picker legend { font-weight: 650; font-size: 14px; margin-bottom: 4px; }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.photo-grid:not(:has(.photo-tile)) { display: none; }
+.photo-tile { position: relative; display: grid; gap: 6px; margin: 0; padding: 8px; border: 1px solid var(--ui-line); border-radius: 14px; background: #fff; min-width: 0; }
+.photo-tile img, .photo-doc { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 9px; background: #f4efe8; }
+.photo-doc { display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ui-muted); }
+.photo-tile figcaption { font-size: 12px; color: var(--ui-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photo-remove { min-height: 44px; border-radius: 10px; border: 1px solid var(--ui-line); background: #fffaf5; font-size: 14px; font-weight: 600; color: #a32828; }
+.photo-remove:hover { background: #fdecec; }
+[data-cover] .photo-grid .photo-tile:first-child::before { content: 'Foto utama'; position: absolute; top: 14px; left: 14px; padding: 3px 9px; border-radius: 999px; background: var(--ui-orange); color: #fff; font-size: 11px; font-weight: 700; }
+.photo-add { position: relative; justify-self: start; cursor: pointer; }
+.photo-add input { position: absolute; inset: 0; width: 100%; min-height: 0; opacity: 0; cursor: pointer; }
+.photo-add:has(input:focus-visible) { outline: 2px solid var(--ui-ink); outline-offset: 3px; }
+.photo-picker > .field-error:empty { display: none; }
+/* Semua foto & berkas: kisi foto, bukan kartu teks. */
+.media-library { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.media-library .empty-state { grid-column: 1 / -1; }
+.photo-download { font-size: 13px; font-weight: 600; color: var(--ui-accent); min-height: 32px; display: inline-flex; align-items: center; }

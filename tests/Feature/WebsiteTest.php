@@ -75,31 +75,66 @@ class WebsiteTest extends TestCase
         return DB::table('media_files')->insertGetId(['banjar_id' => $tenant ?? $this->a, 'path' => $path, 'name' => 'Media uji', 'mime' => $mime, 'size' => 10, 'visibility' => $visibility, 'uploader_id' => $this->admin->id, 'created_at' => now(), 'updated_at' => now()]);
     }
 
-    public function test_upload_dialog_forms_are_separate_from_content_and_profile_forms(): void
+    public function test_photo_forms_pick_files_directly_without_dialog_or_visibility_choice(): void
     {
         $this->login();
-        foreach (['/admin/profile', '/admin/content/galeri/create'] as $path) {
+        foreach (['/admin/profile', '/admin/content/pengumuman/create', '/admin/content/galeri/create', '/admin/content/dokumen/create', '/admin/media'] as $path) {
             $html = $this->get($this->host.$path)->assertOk()->getContent();
-            preg_match_all('/<\/?form\b[^>]*>/i', $html, $tags);
-            $depth = 0;
-            foreach ($tags[0] as $tag) {
-                $depth += str_starts_with(strtolower($tag), '</form') ? -1 : 1;
-                $this->assertContains($depth, [0, 1], 'Forms must never nest or close early on '.$path);
-            }
-            $this->assertSame(0, $depth);
-            $this->assertSame(2, substr_count($html, 'data-quick-add'));
+            $this->assertStringContainsString('enctype="multipart/form-data"', $html, $path);
+            $this->assertStringContainsString('data-photo-picker', $html, $path);
+            $this->assertStringNotContainsString('<dialog', $html, $path);
+            $this->assertStringNotContainsString('Privat', $html, $path);
         }
+        $this->get($this->host.'/admin/content/pengumuman/create')->assertSee('name="photos[]"', false)->assertSee(' multiple ', false)->assertSee('Foto pertama menjadi foto utama');
+        $this->get($this->host.'/admin/profile')->assertSee('name="logo"', false)->assertSee('name="cover"', false);
     }
 
-    public function test_quick_media_upload_returns_selection_data_and_validation_errors(): void
+    public function test_content_photos_upload_together_preview_reorder_and_return_to_list(): void
     {
         $this->login();
-        $response = $this->postJson($this->host.'/admin/media', [
-            'file' => UploadedFile::fake()->image('foto-banjar.png'), 'visibility' => 'PUBLIC',
-        ])->assertOk()->assertJsonStructure(['id', 'name', 'visibility', 'label'])->assertJsonPath('visibility', 'PUBLIC');
-        $this->assertDatabaseHas('media_files', ['id' => $response->json('id'), 'banjar_id' => $this->a]);
-        $this->postJson($this->host.'/admin/media', ['visibility' => 'PUBLIC'])
-            ->assertUnprocessable()->assertJsonStructure(['message']);
+        $photos = fn (...$names) => array_map(fn ($name) => UploadedFile::fake()->image($name, 640, 480), $names);
+        $this->post($this->host.'/admin/content/pengumuman', ['title' => 'Ngaben massal', 'status' => 'PUBLISHED', 'priority' => 'NORMAL', 'photos' => $photos('satu.jpg', 'dua.jpg', 'tiga.jpg')])
+            ->assertRedirect('/admin/content/pengumuman')->assertSessionHas('success');
+        $item = DB::table('announcements')->where('title', 'Ngaben massal')->first();
+        $ids = DB::table('content_photos')->where('content_type', 'pengumuman')->where('content_id', $item->id)->orderBy('sort_order')->pluck('media_id')->all();
+        $this->assertCount(3, $ids);
+        $this->assertSame($ids[0], (int) $item->media_id);
+        $this->assertSame(['satu.jpg', 'dua.jpg', 'tiga.jpg'], DB::table('media_files')->whereIn('id', $ids)->orderBy('id')->pluck('name')->all());
+        $this->assertSame(['PUBLIC'], DB::table('media_files')->whereIn('id', $ids)->distinct()->pluck('visibility')->all());
+        // Website: foto utama besar, foto lain di bawah isi; semuanya bisa dibuka pengunjung.
+        $page = $this->get($this->host.'/pengumuman/ngaben-massal')->assertOk();
+        foreach ($ids as $id) {
+            $page->assertSee('/media/'.$id, false);
+            $this->get($this->host.'/media/'.$id)->assertOk();
+        }
+        // Edit: foto lama tampil sebagai pratinjau; hapus foto pertama, tambah satu foto baru di akhir.
+        $this->get($this->host.'/admin/content/pengumuman/'.$item->id.'/edit')->assertOk()->assertSee('name="keep_photos[]" value="'.$ids[0].'"', false)->assertSee('/admin/media/'.$ids[2].'/download?lihat=1', false);
+        $this->get($this->host.'/admin/media/'.$ids[2].'/download?lihat=1')->assertOk()->assertHeader('Content-Type', 'image/webp');
+        $this->patch($this->host.'/admin/content/pengumuman/'.$item->id, ['title' => 'Ngaben massal', 'status' => 'PUBLISHED', 'priority' => 'NORMAL', 'keep_photos' => [$ids[1], $ids[2]], 'photos' => $photos('empat.jpg')])
+            ->assertRedirect('/admin/content/pengumuman');
+        $after = DB::table('content_photos')->where('content_id', $item->id)->orderBy('sort_order')->pluck('media_id')->all();
+        $this->assertSame([$ids[1], $ids[2]], array_slice($after, 0, 2));
+        $this->assertCount(3, $after);
+        $this->assertSame($ids[1], (int) DB::table('announcements')->where('id', $item->id)->value('media_id'));
+        $this->get($this->host.'/media/'.$ids[0])->assertNotFound();
+        // Semua foto dilepas → tanpa foto utama.
+        $this->patch($this->host.'/admin/content/pengumuman/'.$item->id, ['title' => 'Ngaben massal', 'status' => 'PUBLISHED', 'priority' => 'NORMAL'])->assertSessionHasNoErrors();
+        $this->assertNull(DB::table('announcements')->where('id', $item->id)->value('media_id'));
+        $this->assertSame(0, DB::table('content_photos')->where('content_id', $item->id)->count());
+    }
+
+    public function test_photos_survive_validation_error_and_reject_wrong_files(): void
+    {
+        $this->login();
+        $this->from($this->host.'/admin/content/berita/create')->post($this->host.'/admin/content/berita', ['title' => '', 'status' => 'DRAFT', 'photos' => [UploadedFile::fake()->image('kegiatan.jpg', 300, 200)]])
+            ->assertSessionHasErrors('title');
+        $saved = DB::table('media_files')->where('name', 'kegiatan.jpg')->value('id');
+        $this->assertNotNull($saved);
+        // Foto yang sudah terunggah tetap tampil di formulir, tidak perlu dipilih ulang.
+        $this->get($this->host.'/admin/content/berita/create')->assertOk()->assertSee('name="keep_photos[]" value="'.$saved.'"', false);
+        $this->post($this->host.'/admin/content/berita', ['title' => 'Salah berkas', 'status' => 'DRAFT', 'photos' => [UploadedFile::fake()->create('surat.pdf', 10, 'application/pdf')]])->assertSessionHasErrors('photos.0');
+        $this->post($this->host.'/admin/content/berita', ['title' => 'Terlalu banyak', 'status' => 'DRAFT', 'photos' => array_map(fn ($i) => UploadedFile::fake()->image('f'.$i.'.jpg', 10, 10), range(1, 21))])->assertSessionHasErrors('photos');
+        $this->assertDatabaseMissing('news_posts', ['title' => 'Salah berkas']);
     }
 
     public function test_public_pages_show_only_current_tenant_and_escape_content(): void
@@ -179,23 +214,26 @@ class WebsiteTest extends TestCase
         $this->login();
         $this->get($this->host.'/admin/media/'.$private.'/download')->assertOk();
         $this->get($this->host.'/admin/media/'.$foreign.'/download')->assertNotFound();
-        $this->patch($this->host.'/admin/media/'.$foreign, ['visibility' => 'PUBLIC'])->assertNotFound();
-        $this->patch($this->host.'/admin/media/'.$private, ['visibility' => 'PUBLIC'])->assertRedirect();
+        // Foto Privat lama yang dipasang lewat formulir otomatis menjadi Publik.
+        $this->post($this->host.'/admin/content/berita', ['title' => 'Pasang foto lama', 'status' => 'PUBLISHED', 'keep_photos' => [$private]])->assertSessionHasNoErrors();
         $this->get($this->host.'/media/'.$private)->assertOk();
     }
 
     public function test_upload_reencodes_images_and_rejects_executable_svg_and_oversized_files(): void
     {
         $this->login();
-        $this->post($this->host.'/admin/media', ['file' => UploadedFile::fake()->image('photo.png', 120, 120), 'visibility' => 'PRIVATE'])->assertRedirect()->assertSessionHasNoErrors();
-        $file = DB::table('media_files')->first();
-        $this->assertSame('image/webp', $file->mime);
+        $this->post($this->host.'/admin/media', ['files' => [UploadedFile::fake()->image('photo.png', 120, 120), UploadedFile::fake()->image('kamera.jpg', 4000, 3000)]])->assertRedirect()->assertSessionHasNoErrors();
+        $file = DB::table('media_files')->orderBy('id')->first();
+        $this->assertSame(['image/webp', 'PUBLIC'], [$file->mime, $file->visibility]);
         $this->assertStringStartsWith('banjars/'.$this->a.'/media/', $file->path);
         $this->assertStringStartsWith('RIFF', Storage::disk('local')->get($file->path));
+        // Foto kamera diperkecil ke sisi terpanjang 2000 px.
+        $this->assertSame([2000, 1500], array_slice(getimagesizefromstring(Storage::disk('local')->get(DB::table('media_files')->where('name', 'kamera.jpg')->value('path'))), 0, 2));
         foreach ([UploadedFile::fake()->createWithContent('evil.php', '<?php echo 1;'), UploadedFile::fake()->createWithContent('evil.svg', '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'), UploadedFile::fake()->create('big.pdf', 10241, 'application/pdf')] as $upload) {
-            $this->post($this->host.'/admin/media', ['file' => $upload, 'visibility' => 'PUBLIC'])->assertSessionHasErrors('file');
+            $this->post($this->host.'/admin/media', ['files' => [$upload]])->assertSessionHasErrors('files.0');
         }
-        $this->assertDatabaseCount('media_files', 1);
+        $this->post($this->host.'/admin/media', [])->assertSessionHasErrors('files');
+        $this->assertDatabaseCount('media_files', 2);
     }
 
     public function test_gallery_profile_and_document_visibility(): void
@@ -204,12 +242,13 @@ class WebsiteTest extends TestCase
         $private = $this->file('PRIVATE');
         $pdf = $this->file('PUBLIC', null, 'application/pdf');
         $this->login();
-        $this->post($this->host.'/admin/content/galeri', ['title' => 'Foto Banjar', 'status' => 'PUBLISHED', 'gallery_media' => [$photo, $private]])->assertRedirect()->assertSessionHasNoErrors();
+        $this->post($this->host.'/admin/content/galeri', ['title' => 'Foto Banjar', 'status' => 'PUBLISHED', 'keep_photos' => [$photo]])->assertRedirect()->assertSessionHasNoErrors();
         $this->get($this->host.'/galeri/foto-banjar')->assertOk()->assertSee('/media/'.$photo, false)->assertDontSee('/media/'.$private, false);
-        $this->post($this->host.'/admin/content/dokumen', ['title' => 'Panduan', 'status' => 'PUBLISHED', 'media_id' => $pdf])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame([$photo], DB::table('gallery_items')->pluck('media_id')->map(fn ($id) => (int) $id)->all());
+        $this->post($this->host.'/admin/content/dokumen', ['title' => 'Panduan', 'status' => 'PUBLISHED', 'keep_document' => [$pdf]])->assertRedirect()->assertSessionHasNoErrors();
         $this->get($this->host.'/dokumen/panduan')->assertOk()->assertSee('Unduh dokumen');
         $this->get($this->host.'/media/'.$pdf)->assertOk()->assertHeader('Content-Disposition', 'attachment; filename=berkas-'.$pdf.'.pdf');
-        $this->patch($this->host.'/admin/profile', ['description' => 'Cerita alpha', 'logo_id' => $photo, 'maps_url' => 'https://maps.app.goo.gl/AbCd1234'])->assertRedirect()->assertSessionHasNoErrors();
+        $this->patch($this->host.'/admin/profile', ['description' => 'Cerita alpha', 'keep_logo' => $photo, 'maps_url' => 'https://maps.app.goo.gl/AbCd1234'])->assertRedirect('/admin/website')->assertSessionHasNoErrors();
         $this->get($this->host.'/profil')->assertOk()->assertSee('Cerita alpha')->assertSee('href="https://maps.app.goo.gl/AbCd1234"', false);
         $this->get('http://beta.localhost/profil')->assertOk()->assertDontSee('Cerita alpha');
         // Hanya tautan Google Maps https yang diterima.
@@ -222,8 +261,13 @@ class WebsiteTest extends TestCase
         // Logo menggantikan tanda "B" di website publik, halaman pengurus, dan ikon tab.
         $this->get($this->host.'/')->assertOk()->assertSee('<link rel="icon" href="/media/'.$photo.'"', false)->assertSee('class="public-logo"', false);
         $this->get($this->host.'/admin/website')->assertOk()->assertSee('class="brand-logo" src="/media/'.$photo.'"', false)->assertDontSee('<span class="brand-mark"', false);
-        $this->patch($this->host.'/admin/profile', ['logo_id' => $private])->assertSessionHasNoErrors();
+        // Logo dihapus dari formulir → kembali ke tanda "B"; logo baru bisa dipilih langsung.
+        $this->patch($this->host.'/admin/profile', ['keep_logo' => ''])->assertSessionHasNoErrors();
         $this->get($this->host.'/admin/website')->assertOk()->assertSee('<span class="brand-mark"', false);
+        $this->patch($this->host.'/admin/profile', ['keep_logo' => '', 'logo' => UploadedFile::fake()->image('logo-baru.png', 200, 200)])->assertSessionHasNoErrors();
+        $logo = DB::table('media_files')->where('name', 'logo-baru.png')->first();
+        $this->assertSame(['PUBLIC', $logo->id], [$logo->visibility, (int) DB::table('website_profiles')->where('banjar_id', $this->a)->value('logo_id')]);
+        $this->get($this->host.'/admin/profile')->assertOk()->assertSee('name="keep_logo" value="'.$logo->id.'"', false);
     }
 
     public function test_logo_becomes_share_preview_and_app_icons(): void
@@ -239,7 +283,7 @@ class WebsiteTest extends TestCase
         Storage::disk('local')->put($path, ob_get_clean());
         $logo = DB::table('media_files')->insertGetId(['banjar_id' => $this->a, 'path' => $path, 'name' => 'Logo', 'mime' => 'image/webp', 'size' => 10, 'visibility' => 'PUBLIC', 'uploader_id' => $this->admin->id, 'created_at' => now(), 'updated_at' => now()]);
         $this->login();
-        $this->patch($this->host.'/admin/profile', ['logo_id' => $logo])->assertSessionHasNoErrors();
+        $this->patch($this->host.'/admin/profile', ['keep_logo' => $logo])->assertSessionHasNoErrors();
 
         $brand = '/brand/'.$this->a.'/';
         $this->get($this->host.'/berita')->assertOk()->assertSee($brand.'share.jpg?v='.$logo, false)->assertSee('<meta property="og:image:width" content="1200">', false)
@@ -283,10 +327,10 @@ class WebsiteTest extends TestCase
         $foreign = $this->file('PUBLIC', $this->b);
         $activity = $this->content('agenda', [], $this->b);
         $this->login();
-        $this->post($this->host.'/admin/content/berita', ['title' => 'Invalid', 'status' => 'DRAFT', 'media_id' => $foreign])->assertSessionHasErrors('media_id');
+        $this->post($this->host.'/admin/content/berita', ['title' => 'Invalid', 'status' => 'DRAFT', 'keep_photos' => [$foreign]])->assertSessionHasErrors('photos.0');
         $this->post($this->host.'/admin/content/pengumuman', ['title' => 'Invalid', 'status' => 'DRAFT', 'priority' => 'NORMAL', 'related_activity_id' => $activity])->assertSessionHasErrors('related_activity_id');
-        $this->post($this->host.'/admin/content/galeri', ['title' => 'Invalid', 'status' => 'DRAFT', 'gallery_media' => [$foreign]])->assertSessionHasErrors('gallery_media.0');
-        $this->patch($this->host.'/admin/profile', ['logo_id' => $foreign])->assertSessionHasErrors('logo_id');
+        $this->post($this->host.'/admin/content/galeri', ['title' => 'Invalid', 'status' => 'DRAFT', 'keep_photos' => [$foreign]])->assertSessionHasErrors('photos.0');
+        $this->patch($this->host.'/admin/profile', ['keep_logo' => $foreign])->assertSessionHasErrors('logo_id');
         $this->expectException(QueryException::class);
         $this->content('berita', ['media_id' => $foreign]);
     }

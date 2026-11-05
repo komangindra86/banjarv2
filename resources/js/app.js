@@ -209,9 +209,8 @@ document.querySelectorAll('input[data-template-accent]').forEach((radio) => {
 document.querySelectorAll('dialog [data-close-dialog]').forEach((btn) => {
     btn.addEventListener('click', () => btn.closest('dialog')?.close());
 });
-// Formulir "tambah cepat" dalam dialog (kategori kas, unggah foto langsung dari form konten): submit via
-// fetch tanpa meninggalkan halaman, lalu hasilnya dipasang ke <select> (data-target-select) atau daftar
-// checkbox (data-target-checklist) tujuan — form utama tidak pernah disentuh baik berhasil maupun gagal.
+// Formulir "tambah cepat" dalam dialog (kategori kas): submit via fetch tanpa meninggalkan halaman, lalu hasilnya
+// dipasang ke <select> tujuan (data-target-select) — form utama tidak pernah disentuh baik berhasil maupun gagal.
 document.querySelectorAll('[data-quick-add]').forEach((form) => {
     const dialog = form.closest('dialog');
     const errorBox = form.querySelector('[data-quick-error]');
@@ -228,15 +227,6 @@ document.querySelectorAll('[data-quick-add]').forEach((form) => {
             const label = json.label ?? json.name;
             const select = form.dataset.targetSelect ? document.querySelector(form.dataset.targetSelect) : null;
             if (select) select.add(new Option(label, String(json.id), true, true));
-            const checklist = form.dataset.targetChecklist ? document.querySelector(form.dataset.targetChecklist) : null;
-            if (checklist) {
-                checklist.querySelector('[data-checklist-empty]')?.remove();
-                const item = document.createElement('label');
-                item.className = 'check-option';
-                item.innerHTML = `<input type="checkbox" name="${checklist.dataset.checkboxName}" value="${json.id}" checked><span></span>`;
-                item.querySelector('span').textContent = label;
-                checklist.prepend(item);
-            }
             dialog?.close();
             form.reset();
         } catch {
@@ -246,6 +236,120 @@ document.querySelectorAll('[data-quick-add]').forEach((form) => {
         }
     });
     dialog?.querySelector('[data-cancel-dialog]')?.addEventListener('click', () => { errorBox.textContent = ''; form.reset(); dialog.close(); });
+});
+
+// Pemilih foto (komponen photo-picker, Master Prompt §18/§58): foto dipilih langsung — bisa beberapa sekaligus —
+// lalu tampil sebagai pratinjau dan ikut terkirim saat formulir disimpan. Foto kamera HP diperkecil dulu di
+// browser (sisi terpanjang 1600 px) agar unggahan cepat dan muat dalam batas server.
+const PHOTO_MAX_SIDE = 1600;
+const UPLOAD_LIMIT = 20 * 1024 * 1024;
+const MAX_FILES = 20;
+
+async function shrinkPhoto(file) {
+    if (!file.type.startsWith('image/') || file.type === 'image/gif' || typeof createImageBitmap !== 'function') return file;
+    try {
+        const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+        const scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+        const keepsAlpha = file.type === 'image/png' || file.type === 'image/webp';
+        if (scale === 1 && file.size < 1.5 * 1024 * 1024 && /^image\/(jpeg|png|webp)$/.test(file.type)) return file;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close?.();
+        const type = keepsAlpha ? 'image/png' : 'image/jpeg';
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, 0.85));
+        if (!blob || blob.size >= file.size) return file;
+        const name = file.name.replace(/\.[^.]+$/, '') + (type === 'image/png' ? '.png' : '.jpg');
+        return new File([blob], name, { type, lastModified: file.lastModified });
+    } catch {
+        return file;
+    }
+}
+
+document.querySelectorAll('[data-photo-picker]').forEach((picker) => {
+    const input = picker.querySelector('[data-photo-input]');
+    const grid = picker.querySelector('[data-photo-grid]');
+    const single = picker.querySelector('[data-photo-keep-single]');
+    const multiple = picker.hasAttribute('data-multiple');
+    const canReplaceFiles = typeof DataTransfer === 'function';
+    const status = document.createElement('span');
+    status.className = 'field-error';
+    status.setAttribute('role', 'status');
+    picker.append(status);
+    let chosen = [];
+
+    const syncInput = () => {
+        if (!canReplaceFiles) return;
+        const transfer = new DataTransfer();
+        chosen.forEach((file) => transfer.items.add(file));
+        input.files = transfer.files;
+    };
+    const tile = (file, onRemove) => {
+        const figure = document.createElement('figure');
+        figure.className = 'photo-tile is-new';
+        if (file.type.startsWith('image/')) {
+            const img = document.createElement('img');
+            img.alt = '';
+            img.src = URL.createObjectURL(file);
+            img.onload = () => URL.revokeObjectURL(img.src);
+            figure.append(img);
+        } else {
+            const doc = document.createElement('span');
+            doc.className = 'photo-doc';
+            doc.textContent = 'PDF';
+            figure.append(doc);
+        }
+        const caption = document.createElement('figcaption');
+        caption.textContent = file.name;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'photo-remove';
+        remove.textContent = 'Hapus';
+        remove.setAttribute('aria-label', `Hapus ${file.name}`);
+        remove.addEventListener('click', onRemove);
+        figure.append(caption, remove);
+        return figure;
+    };
+    const render = () => {
+        grid.querySelectorAll('.photo-tile.is-new').forEach((el) => el.remove());
+        chosen.forEach((file, index) => grid.append(tile(file, () => { chosen.splice(index, 1); syncInput(); render(); })));
+        const total = chosen.reduce((sum, file) => sum + file.size, 0);
+        status.textContent = chosen.length > MAX_FILES ? `Paling banyak ${MAX_FILES} foto sekali simpan. Hapus sebagian foto dulu.`
+            : total > UPLOAD_LIMIT ? 'Ukuran foto terlalu besar untuk sekali simpan. Hapus sebagian foto, simpan, lalu tambahkan lagi.' : '';
+    };
+
+    // Foto lama: tombol Hapus melepas foto dari konten (berkasnya tetap ada di Semua foto & berkas).
+    grid.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-photo-remove]');
+        if (!button) return;
+        button.closest('[data-photo-tile]')?.remove();
+        if (single) single.value = '';
+    });
+    input.addEventListener('change', async () => {
+        const picked = [...input.files];
+        if (!picked.length) { syncInput(); return; }
+        status.textContent = 'Menyiapkan foto…';
+        const prepared = await Promise.all(picked.map(shrinkPhoto));
+        if (multiple) {
+            // Tanpa DataTransfer (peramban lama) isi input tidak bisa digabung; pilihan terakhir yang terkirim.
+            chosen = canReplaceFiles ? chosen.concat(prepared) : picked;
+        } else {
+            // Satu foto (logo, sampul, dokumen): pilihan baru menggantikan foto lama.
+            chosen = prepared.slice(0, 1);
+            grid.querySelectorAll('[data-photo-tile]').forEach((el) => el.remove());
+            if (single) single.value = '';
+        }
+        syncInput();
+        render();
+    });
+    input.form?.addEventListener('submit', (event) => {
+        if (status.textContent && status.textContent !== 'Menyiapkan foto…') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            status.scrollIntoView({ block: 'center' });
+        }
+    }, true);
 });
 
 // Sembunyikan/nonaktifkan field cakupan unit kecuali peran terpilih Kesinoman/Kelian (Master Prompt §29.2).
