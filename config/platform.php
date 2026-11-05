@@ -5,6 +5,8 @@ return [
     'tenant_base_domain' => env('TENANT_BASE_DOMAIN', 'localhost'),
     // §53: portal krama pusat untuk semua Banjar; Banjar ditentukan dari akun warga, bukan dari domain.
     'portal_host' => env('PORTAL_HOST', 'portal.banjar.localhost'),
+    // Banjar demo untuk reviewer: dipulihkan ke snapshot setiap hari (demo:snapshot, demo:reset). Kosong = tidak ada.
+    'demo_banjar_id' => env('DEMO_BANJAR_ID'),
     'modules' => [
         'WEBSITE' => 'Website', 'KRAMA' => 'Krama & KK',
         'ADMINISTRATION' => 'Administrasi', 'FINANCE' => 'Keuangan',

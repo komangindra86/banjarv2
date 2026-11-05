@@ -63,6 +63,18 @@ runuser -u banjarv2 -- php artisan platform:create-admin email-pemilik@example.c
 
 Perintah meminta password secara tersembunyi. Jangan menyalin credential demo lokal ke produksi.
 
+## Banjar demo reviewer
+
+`DEMO_BANJAR_ID=2` di `shared/.env` menandai Demo Banjar. Scheduler menjalankan `demo:reset` setiap hari pukul 03.00 WITA: seluruh data Banjar demo (semua tabel ber-`banjar_id` kecuali `tenant_domains`), berkas `storage/app/private/banjars/2/`, keanggotaan, dan akun buatan reviewer dikembalikan ke snapshot di `storage/app/private/demo-baseline/2/`. Setelah sengaja mengubah data awal demo (misalnya menambah contoh data), simpan ulang titik pemulihan:
+
+```bash
+cd /var/www/banjarv2/current
+runuser -u banjarv2 -- php artisan demo:snapshot
+runuser -u banjarv2 -- php artisan demo:reset   # pulihkan sekarang
+```
+
+Bila migrasi baru menghapus atau mengganti nama kolom, jalankan `demo:snapshot` lagi setelah deploy agar snapshot cocok dengan skema.
+
 ## Verifikasi dan operasi
 
 Pada deployment pertama: 125 tes PHP / 1.259 assertions, 4 tes PWA, Pint, dan build Vite lokal lolos. Semua migrasi dan cache produksi berhasil. `/login` dan `/up` mengembalikan 200, aset CSS/JS 200, `.env` 403, jalur privat yang diuji 404. Browser menampilkan formulir Super Admin tanpa error console. Simulasi renewal SSL berhasil. Login Super Admin berhasil membuka dashboard `/platform`; logout dan penolakan akses dashboard setelah logout juga sudah diverifikasi.
