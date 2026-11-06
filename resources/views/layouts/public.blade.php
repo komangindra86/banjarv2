@@ -1,6 +1,7 @@
 <!DOCTYPE html><html lang="id"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ $seoTitle }}{{ $seoTitle !== $currentBanjar->name ? ' · '.$currentBanjar->name : '' }}</title>
+<title>{{ $seoTitle }}{{ $seoTitle !== $currentBanjar->name ? ' · '.$currentBanjar->name : ' · Website resmi' }}</title>
+@if($noindex ?? false)<meta name="robots" content="noindex, follow">@endif
 <meta name="description" content="{{ $seoDescription }}"><meta name="theme-color" content="{{ $settings->accent_color }}">
 <link rel="canonical" href="{{ $canonical }}"><meta property="og:locale" content="id_ID"><meta property="og:type" content="{{ isset($item) ? 'article' : 'website' }}"><meta property="og:site_name" content="{{ $currentBanjar->name }}"><meta property="og:title" content="{{ $seoTitle }}"><meta property="og:description" content="{{ $seoDescription }}"><meta property="og:url" content="{{ $canonical }}">
 @php
@@ -12,6 +13,8 @@
 {{-- Banjar yang belum mengunggah logo memakai logo Bali Santih. --}}
 <meta property="og:image" content="{{ $baseUrl.($shareImage ?? '/images/balisantih-share.jpg') }}"><meta property="og:image:alt" content="Logo {{ $shareImage ? $currentBanjar->name : 'Bali Santih' }}"><meta property="og:image:type" content="image/jpeg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
+@isset($item)<meta property="article:published_time" content="{{ \Carbon\Carbon::parse($item->published_at)->timezone('Asia/Makassar')->toIso8601String() }}"><meta property="article:modified_time" content="{{ \Carbon\Carbon::parse($item->updated_at ?? $item->published_at)->timezone('Asia/Makassar')->toIso8601String() }}">@endisset
+@if($jsonLd ?? null)<script type="application/ld+json">{!! $jsonLd !!}</script>@endif
 <link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="{{ $brandIcon?->url('icon-192') ?? $siteLogo ?? '/icons/icon-192.png' }}"><link rel="apple-touch-icon" href="{{ $brandIcon?->url('apple-180') ?? $siteLogo ?? '/icons/icon-180.png' }}">
 @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head><body class="public-site {{ $settings->template_code ?? 'template-01' }}" style="--banjar-accent: {{ $settings->accent_color }}">

@@ -402,6 +402,53 @@ class WebsiteTest extends TestCase
         app(MediaManager::class)->upload($this->admin, []);
     }
 
+    // SEO: setiap tulisan terbit Banjar bisa ditemukan dan dipahami Google; dashboard dan portal tidak.
+    public function test_published_articles_are_ready_for_search_engines(): void
+    {
+        $base = 'http://alpha.localhost:18915';
+        $photo = $this->file();
+        $this->content('berita', ['title' => 'Piodalan </script> Pura Desa', 'slug' => 'piodalan', 'body' => "Krama ngayah\n\nbersama sejak pagi.", 'media_id' => $photo, 'updated_at' => '2026-10-02 10:00:00']);
+        DB::table('content_photos')->insert(['banjar_id' => $this->a, 'content_type' => 'berita', 'content_id' => DB::table('news_posts')->value('id'), 'media_id' => $photo, 'sort_order' => 0]);
+        $this->content('berita', ['title' => 'Gotong royong', 'slug' => 'gotong-royong']);
+        $this->content('agenda', ['title' => 'Paruman', 'slug' => 'paruman', 'location' => 'Bale Banjar', 'visibility' => 'PUBLIC']);
+        $this->content('berita', ['title' => 'Draf rahasia', 'slug' => 'draf', 'status' => 'DRAFT']);
+
+        // robots.txt per alamat: website Banjar menunjuk peta situsnya; platform dan portal tertutup.
+        $this->get($this->host.'/robots.txt')->assertOk()->assertHeader('Content-Type', 'text/plain; charset=UTF-8')
+            ->assertSee('Sitemap: '.$base.'/sitemap.xml')->assertSee('Disallow: /admin')->assertDontSee("Disallow: /\n");
+        $this->assertStringContainsString("Disallow: /\n", $this->get('http://admin.banjar.localhost/robots.txt')->assertOk()->getContent());
+        config(['platform.portal_host' => 'portal.banjar.localhost']);
+        $this->assertStringContainsString("Disallow: /\n", $this->get('http://portal.banjar.localhost/robots.txt')->assertOk()->getContent());
+
+        // Peta situs: tulisan terbit beserta tanggal ubah dan fotonya; draf tidak.
+        $this->get($this->host.'/sitemap.xml')->assertOk()->assertSee('<loc>'.$base.'/berita/piodalan</loc><lastmod>2026-10-02', false)
+            ->assertSee('<image:loc>'.$base.'/media/'.$photo.'</image:loc>', false)->assertSee($base.'/agenda/paruman', false)->assertDontSee('/berita/draf', false);
+
+        // Halaman artikel: judul, deskripsi, tanggal, data terstruktur NewsArticle + breadcrumb, dan tautan tulisan lain.
+        $html = $this->get($this->host.'/berita/piodalan')->assertOk()
+            ->assertSee('<meta name="description" content="Krama ngayah bersama sejak pagi.">', false)
+            ->assertSee('<link rel="canonical" href="'.$base.'/berita/piodalan">', false)
+            ->assertSee('property="article:modified_time" content="2026-10-02T18:00:00+08:00"', false)
+            ->assertSee('Berita lainnya')->assertSee('/berita/gotong-royong', false)->assertDontSee('noindex')->getContent();
+        preg_match('#<script type="application/ld\+json">(.+?)</script>#s', $html, $m);
+        $this->assertStringNotContainsString('</script>', $m[1], 'Judul pengurus tidak boleh menutup tag script.');
+        $graph = collect(json_decode($m[1], true, 512, JSON_THROW_ON_ERROR)['@graph'])->keyBy('@type');
+        $this->assertSame('Piodalan </script> Pura Desa', $graph['NewsArticle']['headline']);
+        $this->assertSame([$base.'/media/'.$photo], $graph['NewsArticle']['image']);
+        $this->assertSame('Banjar alpha', $graph['Organization']['name']);
+        $this->assertSame(['Beranda', 'Berita', 'Piodalan </script> Pura Desa'], array_column($graph['BreadcrumbList']['itemListElement'], 'name'));
+
+        // Kegiatan sebagai Event; beranda sebagai organisasi + website; halaman bernomor punya kanonis sendiri.
+        $this->get($this->host.'/agenda/paruman')->assertOk()->assertSee('"@type":"Event"', false)->assertSee('"name":"Bale Banjar"', false);
+        $this->get($this->host.'/')->assertOk()->assertSee('<title>Banjar alpha · Website resmi</title>', false)->assertSee('"@type":"WebSite"', false);
+        $this->get($this->host.'/berita?page=2&utm_source=wa')->assertOk()->assertSee('<link rel="canonical" href="'.$base.'/berita?page=2">', false);
+
+        // Banjar demo (diisi bebas reviewer) tidak masuk hasil pencarian.
+        config(['platform.demo_banjar_id' => $this->a]);
+        $this->get($this->host.'/berita/piodalan')->assertOk()->assertSee('<meta name="robots" content="noindex, follow">', false);
+        $this->get($this->host.'/robots.txt')->assertOk()->assertDontSee('Sitemap:');
+    }
+
     public function test_verified_primary_domain_is_used_for_canonical_share_qr_and_sitemap(): void
     {
         $this->content('berita');

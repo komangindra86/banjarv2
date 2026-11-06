@@ -269,5 +269,6 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
 Route::get('/profil', [PublicWebsiteController::class, 'profile']);
 Route::get('/media/{id}', [PublicWebsiteController::class, 'media'])->whereNumber('id');
 Route::get('/sitemap.xml', [PublicWebsiteController::class, 'sitemap']);
+Route::get('/robots.txt', [PublicWebsiteController::class, 'robots']);
 Route::get('/{type}', [PublicWebsiteController::class, 'index'])->whereIn('type', array_keys(ContentCatalog::TYPES));
 Route::get('/{type}/{slug}', [PublicWebsiteController::class, 'show'])->whereIn('type', array_keys(ContentCatalog::TYPES));

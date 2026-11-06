@@ -13,7 +13,7 @@ final class ResolvePortalBanjar
 {
     // Halaman yang boleh dibuka di portal pusat; seluruh halaman pengurus (/admin, /platform, website publik) tertutup.
     private const PATHS = [
-        '#^/(login|logout|pilih-banjar|manifest\.webmanifest|up)$#',
+        '#^/(login|logout|pilih-banjar|manifest\.webmanifest|robots\.txt|up)$#',
         '#^/(portal|payments|aktivitas|notifications)(/.*)?$#',
         '#^/admin/krama/(mine|changes|changes/\d+|people/\d+/change)$#',
         '#^/akun/kata-sandi$#',
@@ -24,7 +24,7 @@ final class ResolvePortalBanjar
     ];
 
     // Halaman yang tidak memerlukan Banjar terpilih.
-    private const TENANTLESS = ['/login', '/logout', '/pilih-banjar', '/manifest.webmanifest', '/up'];
+    private const TENANTLESS = ['/login', '/logout', '/pilih-banjar', '/manifest.webmanifest', '/robots.txt', '/up'];
 
     public function __construct(private CurrentBanjar $tenant, private PortalManager $portal) {}
 

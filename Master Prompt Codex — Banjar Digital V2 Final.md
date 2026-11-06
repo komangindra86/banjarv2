@@ -409,6 +409,14 @@ Satu nama untuk satu hal, sama di menu pengurus dan website: Pengumuman (bukan "
 
 Setiap jenis konten punya petunjuk "isi apa di sini" untuk pengurus (kartu Konten, halaman daftar, formulir) dan kalimat pembuka di website, keduanya di `ContentCatalog`. Pembeda utama: Pengumuman = info yang perlu segera diketahui (undangan paruman, berita duka, perubahan jadwal), boleh diberi batas berlaku lalu pindah ke Riwayat; Berita = tulisan yang tetap tersimpan seperti blog (cerita kegiatan, sejarah, tradisi) beserta foto, tanpa batas berlaku; Kegiatan = jadwal yang akan datang; Galeri = kumpulan foto tanpa tulisan panjang; Layanan = cara mengurus keperluan di Banjar; Dokumen = awig-awig, pararem, laporan, formulir.
 
+SEO website Banjar (otomatis, tanpa isian teknis bagi pengurus):
+- `robots.txt` dibuat per alamat: website Banjar boleh ditelusuri (kecuali `/admin`, `/login`, `/portal`, `/akun`, dan halaman akun lain) dan menunjuk `sitemap.xml`; dashboard platform, portal krama, dan Banjar tanpa modul Website menolak semua penelusuran.
+- `sitemap.xml` memuat setiap tulisan terbit beserta `lastmod` (tanggal terakhir diubah) dan foto utamanya; draf, terjadwal, dan kegiatan internal tidak ikut.
+- Setiap halaman memiliki judul, deskripsi dari isi tulisan, alamat kanonis (halaman bernomor `?page=` punya kanonis sendiri), dan data terstruktur schema.org: Organization + WebSite (beranda, profil), NewsArticle (Berita), Article (Pengumuman), Event (Kegiatan), dan BreadcrumbList.
+- Halaman isi menampilkan tiga tulisan lain sejenis ("Berita lainnya") agar semua tulisan saling terhubung.
+- Banjar demo (`DEMO_BANJAR_ID`) diberi `noindex` dan tidak mengumumkan sitemap.
+- Pendaftaran ke Google Search Console dilakukan pemilik platform sekali untuk properti domain `balisantih.com` (mencakup semua subdomain Banjar); domain kustom Banjar perlu diverifikasi terpisah.
+
 Navigation harus tetap sederhana.
 
 Jangan tampilkan terlalu banyak menu sekaligus.
