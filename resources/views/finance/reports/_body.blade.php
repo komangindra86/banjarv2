@@ -65,11 +65,12 @@
 @foreach($data['accounts'] as $account)
 <tr><td>{{ $account['name'] }} ({{ $account['type'] === 'BANK' ? 'Bank' : 'Kas tunai' }})</td><td class="num">{{ $money($account['balance']) }}</td></tr>
 @endforeach
+@if(($data['qris_balance'] ?? 0) !== 0)<tr><td>Dana QRIS belum dicairkan</td><td class="num">{{ $money($data['qris_balance']) }}</td></tr>@endif
 <tr><td>Piutang ({{ $data['piutang']['count'] }} tagihan belum lunas)</td><td class="num">{{ $money($data['piutang']['total']) }}</td></tr>
 <tr class="total-row"><td>Total posisi dana termasuk piutang</td><td class="num">{{ $money($data['posisi_dana_total']) }}</td></tr>
 </tbody>
 </table>
-<p class="help mt-2">Total posisi dana termasuk piutang; kas dan bank ditampilkan terpisah pada baris di atas. Piutang bukan uang kas yang tersedia untuk dibelanjakan.</p>
+<p class="help mt-2">Total posisi dana termasuk piutang; kas dan bank ditampilkan terpisah pada baris di atas. Piutang bukan uang kas yang tersedia untuk dibelanjakan.@if(($data['qris_balance'] ?? 0) !== 0) Dana QRIS adalah pembayaran warga yang belum dicairkan ke rekening Banjar.@endif</p>
 
 <table class="signatures">
 <tr>

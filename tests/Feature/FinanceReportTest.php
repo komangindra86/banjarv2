@@ -10,6 +10,7 @@ use App\Platform\Tenancy\CurrentBanjar;
 use App\Platform\Tenants\TenantManager;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -231,6 +232,46 @@ class FinanceReportTest extends TestCase
             ->assertSee('SALDO PINDAHAN SANGKEP TGL. 30 Maret 2026');
         $session()->post($host.'/admin/finance/reports/'.$id.'/finalize', [])->assertSessionHasNoErrors();
         $this->assertDatabaseHas('finance_reports', ['id' => $id, 'status' => 'FINALIZED', 'signer_treasurer_name' => $this->treasurer->name, 'signer_kelian_name' => 'Wayan Kelian']);
+    }
+
+    // Pelunasan tagihan tidak memenuhi laporan: dikelompokkan per jenis (Iuran, Patus, ...) dan diringkas per event.
+    public function test_bill_payments_are_grouped_by_kind_and_summarised_per_event(): void
+    {
+        $admin = User::where('email', 'admin-laporan@example.test')->firstOrFail();
+        foreach (range(2, 4) as $n) {
+            $kk = app(KramaManager::class)->household($admin, null, ['code' => 'KK-L'.$n, 'status' => 'ACTIVE', 'head_name' => 'Kepala '.$n]);
+        }
+        $today = now('Asia/Makassar')->toDateString();
+        $iuranType = $this->finance->billingType($this->kesinoman, ['name' => 'Iuran bulanan', 'kind' => 'IURAN', 'default_amount' => 2000]);
+        $patusType = $this->finance->billingType($this->kesinoman, ['name' => 'Patus', 'kind' => 'PATUS', 'default_amount' => 50000]);
+        $iuran = $this->finance->event($this->kesinoman, ['billing_type_id' => $iuranType, 'title' => 'Iuran November', 'reference' => 'IUR-11', 'event_date' => $today]);
+        $patus = $this->finance->event($this->kesinoman, ['billing_type_id' => $patusType, 'title' => 'Patus Alm. Made', 'reference' => 'PAT-1', 'event_date' => $today]);
+        $this->finance->issue($this->kesinoman, $iuran);
+        $this->context();
+        $this->finance->issue($this->kesinoman, $patus);
+        $this->context();
+        $pay = fn (int $billId) => $this->finance->settle($this->treasurer, $billId, ['cash_account_id' => $this->cashAccount, 'transaction_date' => $today, 'reference' => 'TUNAI', 'submission_key' => (string) Str::uuid()]);
+        $iuranBills = DB::table('bills')->where('billing_event_id', $iuran)->pluck('id');
+        $iuranBills->each(fn ($id) => $pay($id));
+        $patusPaid = $pay(DB::table('bills')->where('billing_event_id', $patus)->value('id'));
+        $this->finance->reverse($this->treasurer, $patusPaid, ['reason' => 'Salah klik lunas']);
+        $pay(DB::table('bills')->where('billing_event_id', $patus)->where('status', 'UNPAID')->orderByDesc('id')->value('id'));
+        $this->cash($this->cashAccount, 'IN', 15000, $today, null, 'Dana punia');
+
+        $id = $this->reports->create($this->treasurer, ['sangkep_title' => 'Sangkep November', 'sangkep_date' => $today]);
+        $data = $this->reports->compute($this->reports->row($id));
+        $sections = collect($data['pendapatan'])->keyBy(fn ($g) => $g['category']['name']);
+        $this->assertSame(['Pembayaran Iuran', 'Pembayaran Patus', 'Belum dikategorikan'], $sections->keys()->all());
+        $this->assertCount(1, $sections['Pembayaran Iuran']['lines'], 'Satu baris per event tagihan, bukan per KK.');
+        $this->assertSame('Iuran November · 4 KK', Crypt::decryptString($sections['Pembayaran Iuran']['lines'][0]['reason']));
+        $this->assertSame(8000, $sections['Pembayaran Iuran']['subtotal']);
+        $this->assertSame('Patus Alm. Made · 1 KK', Crypt::decryptString($sections['Pembayaran Patus']['lines'][0]['reason']));
+        $this->assertSame(50000, $sections['Pembayaran Patus']['subtotal']);
+        $this->assertSame(15000, $sections['Belum dikategorikan']['subtotal']);
+        // Pembalikan "salah klik" tidak muncul sebagai pengeluaran; total dan saldo tetap sesuai buku kas.
+        $this->assertSame([], $data['pengeluaran']);
+        $this->assertSame([73000, 0], [$data['total_pemasukan'], $data['total_pengeluaran']]);
+        $this->assertSame($this->finance->balance($this->cashAccount, $today), $data['saldo_akhir']);
     }
 
     // Sebelum final, draf boleh diperbaiki (nama/tanggal sangkep) atau dibatalkan; buku kas tidak berubah.

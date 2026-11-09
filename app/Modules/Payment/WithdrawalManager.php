@@ -204,6 +204,8 @@ final class WithdrawalManager
                 DB::table('withdrawals')->where('id', $w->id)->update($stored + ['status' => 'PAID', 'processed_by' => $actor->id, 'processed_at' => now(),
                     'bank_reference_encrypted' => Crypt::encryptString($data['bank_reference']), 'bank_reference_hash' => $hash, 'transferred_at' => $transferred, 'updated_at' => now()]);
                 $this->ledger->postWithdrawal($w, 'paid', ['RESERVED' => (int) $w->amount], ['PAID_OUT' => (int) $w->amount], $actor->id);
+                // Uang sudah di rekening Banjar: catat otomatis di buku kas sebagai pemindahan (bukan pendapatan).
+                FinanceManager::recordQrisPayout(DB::table('withdrawals')->where('id', $w->id)->first(), $actor->id);
                 $this->step($w, 'paid', 'PROCESSING', 'PAID', $actor, 'PLATFORM');
                 $this->audit->record($w->banjar_id, $actor->id, 'withdrawal.paid', 'withdrawals', $w->id, ['status' => 'PROCESSING'], ['status' => 'PAID', 'amount' => $w->amount]);
                 $this->notifications->notify((int) $w->banjar_id, (int) $w->requested_by, 'withdrawal.resolved', 'Pencairan selesai', 'Permintaan pencairan Anda telah ditransfer.', '/admin/withdrawals');

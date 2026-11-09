@@ -332,4 +332,37 @@ class WithdrawalTest extends TestCase
         $this->tenantSession($this->petengen)->get($this->host.'/admin/payments')->assertOk()->assertSee('Pencairan #'.$id);
         $this->consistent();
     }
+
+    // QRIS sampai laporan: pembayaran warga = pendapatan (dikelompokkan per event), biaya layanan = pengeluaran,
+    // sisa = "Dana QRIS belum dicairkan"; pencairan tercatat otomatis di buku kas sebagai pemindahan, bukan pendapatan.
+    public function test_qris_payments_fees_and_payout_flow_into_the_cash_report(): void
+    {
+        Storage::fake('local');
+        $id = $this->request(100000);
+        $this->withdrawals->claim($this->operator, $id);
+        $this->paid($id, 'TRF-QRIS-1');
+
+        $transfer = DB::table('cash_transactions')->where('banjar_id', $this->fixture['tenant'])->where('withdrawal_id', $id)->first();
+        $this->assertNotNull($transfer, 'Pencairan tercatat otomatis di buku kas.');
+        $this->assertSame(['TRANSFER', 'IN', 100000], [$transfer->source, $transfer->direction, (int) $transfer->amount]);
+        $this->assertSame('BANK', DB::table('cash_accounts')->where('id', $transfer->cash_account_id)->value('type'));
+        $this->assertSame($transfer->id, \App\Modules\Finance\FinanceManager::recordQrisPayout(DB::table('withdrawals')->find($id), $this->operator->id), 'Tidak tercatat dua kali.');
+        $this->context();
+        $this->rejected(fn () => app(\App\Modules\Finance\FinanceManager::class)->reverse($this->petengen, $transfer->id, ['reason' => 'Coba balik pencairan']), 409);
+
+        $reports = app(\App\Modules\Finance\FinanceReportManager::class);
+        $report = $reports->create($this->petengen, ['sangkep_title' => 'Sangkep QRIS', 'sangkep_date' => now('Asia/Makassar')->toDateString()]);
+        $data = $reports->compute($reports->row($report));
+        $income = collect($data['pendapatan'])->keyBy(fn ($g) => $g['category']['name']);
+        $this->assertSame(['Pembayaran Iuran'], $income->keys()->all(), 'Pencairan tidak muncul sebagai pendapatan.');
+        $this->assertSame('Iuran September 2026 · 3 KK', \Illuminate\Support\Facades\Crypt::decryptString($income['Pembayaran Iuran']['lines'][0]['reason']));
+        $this->assertSame(150000, $income['Pembayaran Iuran']['subtotal']);
+        $fees = $this->balance('FEE');
+        $this->assertSame([150000, $fees], [$data['total_pemasukan'], $data['total_pengeluaran']]);
+        $this->assertSame('Biaya layanan QRIS', $data['pengeluaran'][0]['category']['name']);
+        $this->assertSame(150000 - $fees - 100000, $data['qris_balance']);
+        // Saldo akhir = uang di buku kas (rekening hasil pencairan) + Dana QRIS yang belum dicairkan.
+        $this->assertSame(array_sum(array_column($data['accounts'], 'balance')) + $data['qris_balance'], $data['saldo_akhir']);
+        $this->assertSame(150000 - $fees, $data['saldo_akhir']);
+    }
 }

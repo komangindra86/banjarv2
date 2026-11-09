@@ -8,6 +8,7 @@ use App\Modules\Notification\NotificationManager;
 use App\Platform\Audit\Audit;
 use App\Platform\Tenancy\CurrentBanjar;
 use App\Platform\Tenancy\TenantQuery;
+use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Crypt;
@@ -627,6 +628,36 @@ final class FinanceManager
         });
     }
 
+    /**
+     * Pencairan dana QRIS yang sudah ditransfer ke rekening Banjar dicatat otomatis di buku kas sebagai pemindahan
+     * (TRANSFER) — saldo rekening bertambah, tetapi bukan pendapatan, karena pendapatannya sudah dihitung saat warga
+     * membayar QRIS (FinanceReportManager). Rekening bank di buku kas dibuat otomatis bila belum ada. Dipanggil dari
+     * WithdrawalManager dalam transaksi yang sama dengan jurnal "paid"; aman dipanggil ulang.
+     */
+    public static function recordQrisPayout(object $withdrawal, int $actorId): ?int
+    {
+        $tenant = (int) $withdrawal->banjar_id;
+        if (DB::table('banjar_modules')->where('banjar_id', $tenant)->where('code', 'FINANCE')->value('status') !== 'ACTIVE') {
+            return null;
+        }
+        if ($existing = DB::table('cash_transactions')->where('banjar_id', $tenant)->where('withdrawal_id', $withdrawal->id)->value('id')) {
+            return (int) $existing;
+        }
+        $name = mb_substr('Rekening '.$withdrawal->bank_name.' '.$withdrawal->account_number_masked, 0, 100);
+        $account = DB::table('cash_accounts')->where('banjar_id', $tenant)->where('name', $name)->value('id')
+            ?? DB::table('cash_accounts')->insertGetId(['banjar_id' => $tenant, 'name' => $name, 'type' => 'BANK', 'created_at' => now(), 'updated_at' => now()]);
+        $key = (string) Str::uuid();
+        $date = Carbon::parse($withdrawal->transferred_at ?? now())->timezone('Asia/Makassar')->toDateString();
+
+        return DB::table('cash_transactions')->insertGetId([
+            'banjar_id' => $tenant, 'cash_account_id' => $account, 'direction' => 'IN', 'amount' => (int) $withdrawal->amount,
+            'transaction_date' => $date, 'reason' => Crypt::encryptString('Pencairan dana QRIS '.$withdrawal->reference.' (pemindahan dari Dana QRIS, bukan pendapatan)'),
+            'reference' => mb_substr((string) $withdrawal->reference, 0, 100), 'source' => 'TRANSFER', 'withdrawal_id' => $withdrawal->id,
+            'submission_key' => $key, 'submission_hash' => hash('sha256', 'withdrawal:'.$withdrawal->id),
+            'created_by' => $actorId, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+
     public function reverse(User $actor, int $id, array $input): int
     {
         $data = Validator::make($input, ['reason' => ['required', 'string', 'min:5', 'max:1000']])->validate();
@@ -634,6 +665,7 @@ final class FinanceManager
         return $this->write($actor, 'cash.manage', function () use ($actor, $id, $data) {
             $original = $this->row('cash_transactions', $id);
             abort_if($original->source === 'REVERSAL', 409, 'Transaksi pembalik tidak dapat dibalik lagi.');
+            abort_if($original->source === 'TRANSFER', 409, 'Pencairan dana QRIS dicatat otomatis dan tidak dapat dibalik.');
             $existing = $this->query->table('cash_transactions')->where('reversal_of_id', $id)->value('id');
             if ($existing) {
                 return $existing;
