@@ -295,8 +295,8 @@ final class FinanceController extends Controller
         $accounts = $this->query->table('cash_accounts')->orderByRaw("type = 'CASH' DESC")->orderBy('name')->get();
         $account = $accounts->firstWhere('id', (int) ($filters['kas'] ?? 0)) ?? $accounts->first();
         // Informasional: QRIS yang masih diproses untuk tagihan ini (lihat catatan di FinanceManager::settle()).
-        $pendingQris = DB::table('payments')->where('banjar_id', app(CurrentBanjar::class)->id())->whereIn('bill_id', $bills->pluck('id'))
-            ->whereIn('status', ['CREATING', 'UNKNOWN', 'PENDING'])->pluck('bill_id')->all();
+        $pendingQris = DB::table('payment_items as i')->join('payments as p', 'p.id', '=', 'i.payment_id')->where('i.banjar_id', app(CurrentBanjar::class)->id())
+            ->whereIn('i.bill_id', $bills->pluck('id'))->whereIn('p.status', ['CREATING', 'UNKNOWN', 'PENDING'])->pluck('i.bill_id')->all();
 
         return view('finance.bills', compact('bills', 'events', 'filters', 'accounts', 'account', 'pendingQris'));
     }
@@ -320,7 +320,8 @@ final class FinanceController extends Controller
         $bill = $this->query->table('bills')->where('id', $id)->first();
         abort_unless($bill, 404);
         // Informasional saja (tidak memblokir pelunasan tunai) — lihat catatan di FinanceManager::settle().
-        $pendingPayment = DB::table('payments')->where('banjar_id', $bill->banjar_id)->where('bill_id', $id)->whereIn('status', ['CREATING', 'UNKNOWN', 'PENDING'])->exists();
+        $pendingPayment = DB::table('payment_items as i')->join('payments as p', 'p.id', '=', 'i.payment_id')->where('i.banjar_id', $bill->banjar_id)->where('i.bill_id', $id)
+            ->whereIn('p.status', ['CREATING', 'UNKNOWN', 'PENDING'])->exists();
 
         return view('finance.bill', ['bill' => $bill, 'event' => $this->query->table('billing_events')->where('id', $bill->billing_event_id)->first(),
             'accounts' => $this->query->table('cash_accounts')->orderBy('name')->get(), 'pendingPayment' => $pendingPayment,

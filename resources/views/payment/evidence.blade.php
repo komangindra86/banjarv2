@@ -2,12 +2,13 @@
 @section('title', 'Pembayaran QRIS #'.$payment->id)
 @section('content')
 @php($money = fn ($v) => \App\Modules\Finance\FinanceManager::money($v))
-<div class="page-heading"><div><a class="text-link" href="/platform/payments">← Rekonsiliasi QRIS</a><h1 class="mt-3">Pembayaran #{{ $payment->id }}</h1><p class="muted">{{ $payment->banjar_name }} · Tagihan #{{ $payment->bill_id }} · {{ \App\Modules\Payment\PaymentManager::STATUSES[$payment->status] }}{{ $payment->blocked ? ' · ditahan untuk pemeriksaan' : '' }}</p></div></div>
+<div class="page-heading"><div><a class="text-link" href="/platform/payments">← Rekonsiliasi QRIS</a><h1 class="mt-3">Pembayaran #{{ $payment->id }}</h1><p class="muted">{{ $payment->banjar_name }} · {{ $bills->count() === 1 ? 'Tagihan #'.$bills->first()->bill_id : $bills->count().' tagihan' }} · {{ \App\Modules\Payment\PaymentManager::STATUSES[$payment->status] }}{{ $payment->blocked ? ' · ditahan untuk pemeriksaan' : '' }}</p></div></div>
 <section class="card form-width mb-6">
 <table class="data-table"><tbody>
 <tr><td>Dibayar warga</td><td class="text-right">{{ $money($payment->gross_amount) }}</td></tr>
 <tr><td>Untuk Banjar (nilai tagihan)</td><td class="text-right">{{ $money($payment->bill_amount ?? $payment->gross_amount) }}</td></tr>
-<tr><td>Biaya layanan (platform)</td><td class="text-right">{{ $money($payment->service_fee) }}</td></tr>
+@foreach($bills as $bill)<tr><td class="muted">· {{ $bill->title ?: 'Tagihan' }} · {{ $bill->household_code }} · #{{ $bill->bill_id }}</td><td class="text-right muted">{{ $money($bill->amount) }}</td></tr>@endforeach
+<tr><td>Biaya layanan aplikasi (platform)</td><td class="text-right">{{ $money($payment->service_fee) }}</td></tr>
 <tr><td>Biaya iPaymu</td><td class="text-right">{{ $payment->gateway_fee === null ? 'belum diketahui' : $money($payment->gateway_fee) }}</td></tr>
 <tr><td><strong>Pendapatan platform</strong></td><td class="text-right"><strong>{{ $money(max(0, (int) $payment->service_fee - (int) $payment->gateway_fee)) }}</strong></td></tr>
 </tbody></table>

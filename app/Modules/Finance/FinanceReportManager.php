@@ -187,14 +187,16 @@ final class FinanceReportManager
         $billTx = $lines->filter(fn ($line) => $line['source'] === 'BILL' && $line['category_id'] === null);
         $reversedBillTx = $lines->filter(fn ($line) => $line['source'] === 'REVERSAL' && $line['category_id'] === null)
             ->filter(fn ($line) => $this->query->table('cash_transactions')->where('id', $line['reversal_of_id'])->where('source', 'BILL')->whereNull('category_id')->exists());
-        // Pembayaran QRIS warga (buku besar pembayaran) masuk kelompok yang sama dengan pembayaran tunai, sebesar nilai
-        // tagihan (bagian Banjar). Biaya layanan dibayar warga dan menjadi pendapatan platform, bukan uang Banjar.
+        // Pembayaran QRIS warga (buku besar pembayaran) masuk kelompok yang sama dengan pembayaran tunai, per rincian
+        // tagihan (satu QRIS bisa untuk beberapa tagihan) sebesar nilai tagihan (bagian Banjar). Biaya layanan aplikasi
+        // dibayar warga dan menjadi pendapatan platform, bukan uang Banjar.
         $fromUtc = Carbon::parse($report->period_from, 'Asia/Makassar')->startOfDay()->utc();
         $toUtc = Carbon::parse($report->period_to, 'Asia/Makassar')->endOfDay()->utc();
         $qrisReceived = DB::table('financial_ledger_transactions as t')->where('t.banjar_id', $this->tenant->id())->where('t.type', 'received')
             ->whereBetween('t.created_at', [$fromUtc, $toUtc])
-            ->join('payments as p', fn ($j) => $j->on('p.id', '=', 't.payment_id')->on('p.banjar_id', '=', 't.banjar_id'))
-            ->orderBy('t.id')->get(['t.id', 't.created_at', 'p.bill_id', 'p.status', DB::raw('COALESCE(p.bill_amount, p.gross_amount) AS banjar_amount')]);
+            ->join('payment_items as i', fn ($j) => $j->on('i.payment_id', '=', 't.payment_id')->on('i.banjar_id', '=', 't.banjar_id'))
+            ->orderBy('t.id')->orderBy('i.bill_id')->get(['t.id', 't.created_at', 'i.bill_id', 'i.amount AS banjar_amount',
+                DB::raw('EXISTS (SELECT 1 FROM bill_settlements s WHERE s.payment_id = t.payment_id AND s.bill_id = i.bill_id) AS settled')]);
         $billIds = $billTx->pluck('bill_id')->merge($reversedBillTx->map(fn ($line) => $this->query->table('cash_transactions')->where('id', $line['reversal_of_id'])->value('bill_id')))
             ->merge($qrisReceived->pluck('bill_id'))->filter()->unique();
         $billInfo = $this->query->table('bills')->whereIn('bills.id', $billIds)
@@ -220,8 +222,8 @@ final class FinanceReportManager
             $addToEvent((int) $this->query->table('cash_transactions')->where('id', $line['reversal_of_id'])->value('bill_id'), $line, -1);
         }
         foreach ($qrisReceived as $payment) {
-            $line = ['id' => 'qris-'.$payment->id, 'transaction_date' => Carbon::parse($payment->created_at)->timezone('Asia/Makassar')->toDateString(), 'amount' => (int) $payment->banjar_amount];
-            if ($payment->status === 'EXCEPTION') {
+            $line = ['id' => 'qris-'.$payment->id.'-'.$payment->bill_id, 'transaction_date' => Carbon::parse($payment->created_at)->timezone('Asia/Makassar')->toDateString(), 'amount' => (int) $payment->banjar_amount];
+            if (! $payment->settled) {
                 // Pembayaran ganda/selisih: uangnya diterima tetapi tidak melunasi tagihan; tetap dihitung agar saldo cocok.
                 $kindGroups['OTHER'] ??= ['events' => [], 'subtotal' => 0];
                 $row = &$kindGroups['OTHER']['events']['qris-exception'];

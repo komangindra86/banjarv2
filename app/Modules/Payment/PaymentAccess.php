@@ -20,6 +20,11 @@ final class PaymentAccess
         $this->access->requireTenant($actor, $permission);
     }
 
+    public function can(User $actor, string $permission): bool
+    {
+        return $this->access->tenant($actor, $permission);
+    }
+
     public function bills(User $actor, bool $pay = false): Builder
     {
         $permission = $pay ? 'payment.create' : 'payment.view';

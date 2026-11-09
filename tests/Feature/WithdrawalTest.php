@@ -358,12 +358,12 @@ class WithdrawalTest extends TestCase
         $this->assertSame('Iuran September 2026 · 3 KK', \Illuminate\Support\Facades\Crypt::decryptString($income['Pembayaran Iuran']['lines'][0]['reason']));
         $this->assertSame(150000, $income['Pembayaran Iuran']['subtotal']);
         $this->assertSame([150000, 0], [$data['total_pemasukan'], $data['total_pengeluaran']]);
-        $this->assertSame([], $data['pengeluaran'], 'Biaya layanan QRIS dibayar warga, bukan pengeluaran Banjar.');
+        $this->assertSame([], $data['pengeluaran'], 'Biaya layanan aplikasi dibayar warga, bukan pengeluaran Banjar.');
         $this->assertSame(150000 - 100000, $data['qris_balance']);
         // Saldo akhir = uang di buku kas (rekening hasil pencairan) + Dana QRIS yang belum dicairkan.
         $this->assertSame(array_sum(array_column($data['accounts'], 'balance')) + $data['qris_balance'], $data['saldo_akhir']);
         $this->assertSame(150000, $data['saldo_akhir']);
         // Biaya layanan 3 × Rp1.750 tercatat sebagai pendapatan platform.
-        $this->assertSame(3 * 1750, $this->balance('PLATFORM'));
+        $this->assertSame(3 * 1000, $this->balance('PLATFORM'));
     }
 }

@@ -5,12 +5,14 @@ namespace App\Modules\Payment;
 use App\Models\User;
 use App\Platform\Audit\Audit;
 use App\Platform\Tenancy\CurrentBanjar;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * QRIS warga (§29, §43). Warga membayar nilai tagihan + biaya layanan (config payment.service_fee_percent). Saat lunas:
+ * QRIS warga (§29, §43). Satu QRIS dapat melunasi beberapa tagihan sekaligus (payment_items). Warga membayar total
+ * tagihan + biaya layanan aplikasi bertingkat (serviceFee). Saat lunas:
  * - nilai tagihan → kantong PENDING Banjar (dapat dicairkan setelah masa tahan, SettlementManager::release);
  * - biaya layanan → kantong PLATFORM (pendapatan Bali Santih), dikurangi biaya iPaymu (kantong FEE).
  * Status selalu dibaca dari server penyedia; callback hanya penanda untuk memeriksa ulang.
@@ -26,40 +28,85 @@ final class PaymentManager
         return (bool) config('payment.enabled') && app(PaymentGatewayInterface::class)::configured();
     }
 
-    /** Biaya layanan QRIS untuk nilai tagihan tertentu, dibulatkan ke atas per rupiah. */
-    public static function serviceFee(int $amount): int
+    /** Tingkatan biaya layanan aplikasi dari konfigurasi: [[batas total, biaya], ...] urut naik. */
+    public static function feeTiers(): array
     {
-        $basisPoints = (int) round((float) config('payment.service_fee_percent') * 100);
+        $tiers = [];
+        foreach (explode(',', (string) config('payment.service_fee_tiers')) as $pair) {
+            if (preg_match('/^\s*(\d+)\s*:\s*(\d+)\s*$/D', $pair, $m) === 1) {
+                $tiers[] = [(int) $m[1], (int) $m[2]];
+            }
+        }
+        usort($tiers, fn ($a, $b) => $a[0] <=> $b[0]);
 
-        return $basisPoints > 0 ? intdiv($amount * $basisPoints + 9999, 10000) : 0;
+        return $tiers;
     }
 
-    public function create(User $actor, int $billId): int
+    /** Persen di atas batas tingkatan terakhir, dalam basis poin (1% = 100). */
+    public static function feeAboveBasisPoints(): int
+    {
+        return max(0, (int) round((float) config('payment.service_fee_above_percent') * 100));
+    }
+
+    /**
+     * Biaya layanan aplikasi untuk total tagihan yang dibayar dalam satu QRIS: tarif tetap per tingkatan, di atas batas
+     * terakhir persen dari total (dibulatkan ke atas per rupiah, tidak kurang dari tarif tingkatan terakhir).
+     * Rumus yang sama ada di resources/js/service-fee.js untuk pratinjau di halaman tagihan.
+     */
+    public static function serviceFee(int $total): int
+    {
+        if ($total <= 0) {
+            return 0;
+        }
+        $tiers = self::feeTiers();
+        foreach ($tiers as [$limit, $fee]) {
+            if ($total <= $limit) {
+                return $fee;
+            }
+        }
+        $basisPoints = self::feeAboveBasisPoints();
+
+        return max($tiers === [] ? 0 : end($tiers)[1], $basisPoints > 0 ? intdiv($total * $basisPoints + 9999, 10000) : 0);
+    }
+
+    /** @param  int|int[]  $billIds  satu atau beberapa tagihan yang dibayar dengan satu QRIS */
+    public function create(User $actor, int|array $billIds): int
     {
         abort_unless(self::ready(), 503, 'QRIS belum diaktifkan oleh Bali Santih.');
-        $this->access->bill($actor, $billId, true);
-        [$id, $created] = DB::transaction(function () use ($actor, $billId) {
+        $billIds = array_values(array_unique(array_filter(array_map('intval', (array) $billIds), fn ($id) => $id > 0)));
+        sort($billIds);
+        abort_if($billIds === [], 422, 'Pilih tagihan yang akan dibayar.');
+        abort_if(count($billIds) > (int) config('payment.max_bills', 50), 422, 'Terlalu banyak tagihan dalam satu QRIS.');
+        abort_unless($this->access->bills($actor, true)->whereIn('id', $billIds)->count() === count($billIds), 404);
+        [$id, $created] = DB::transaction(function () use ($actor, $billIds) {
             DB::table('banjars')->where('id', $this->tenant->id())->lockForUpdate()->firstOrFail();
-            $bill = $this->access->bill($actor, $billId, true);
-            abort_unless($bill->status === 'UNPAID', 409, 'Tagihan sudah lunas atau dibatalkan.');
-            $base = ['banjar_id' => $bill->banjar_id, 'created_at' => now(), 'updated_at' => now()];
-            DB::table('payment_attempt_locks')->insertOrIgnore($base + ['bill_id' => $billId]);
-            $guard = DB::table('payment_attempt_locks')->where('banjar_id', $bill->banjar_id)->where('bill_id', $billId)->first();
-            if ($guard->active_payment_id) {
-                $previous = DB::table('payments')->find($guard->active_payment_id);
-                if (! in_array($previous->status, ['EXPIRED', 'DENIED', 'CANCELLED']) || $previous->blocked) {
-                    return [$previous->id, false];
-                }
+            $bills = $this->access->bills($actor, true)->whereIn('id', $billIds)->orderBy('id')->get();
+            abort_unless($bills->count() === count($billIds), 404);
+            abort_unless($bills->every(fn ($bill) => $bill->status === 'UNPAID'), 409, 'Ada tagihan yang sudah lunas atau dibatalkan.');
+            $banjar = $this->tenant->id();
+            $base = ['banjar_id' => $banjar, 'created_at' => now(), 'updated_at' => now()];
+            DB::table('payment_attempt_locks')->insertOrIgnore(array_map(fn ($billId) => $base + ['bill_id' => $billId], $billIds));
+            $guards = DB::table('payment_attempt_locks')->where('banjar_id', $banjar)->whereIn('bill_id', $billIds)->get();
+            // Tagihan yang masih terikat QRIS lain yang belum selesai tidak boleh dibayar dua kali.
+            $live = DB::table('payments')->whereIn('id', $guards->pluck('active_payment_id')->filter())
+                ->where(fn ($q) => $q->whereNotIn('status', ['EXPIRED', 'DENIED', 'CANCELLED'])->orWhere('blocked', true))->pluck('id');
+            if ($live->isNotEmpty()) {
+                $same = $live->count() === 1 && DB::table('payment_items')->where('payment_id', $live->first())->orderBy('bill_id')->pluck('bill_id')->map(fn ($v) => (int) $v)->all() === $billIds;
+                abort_unless($same, 409, 'Sebagian tagihan sedang menunggu pembayaran QRIS lain. Selesaikan QRIS itu atau tunggu sampai kedaluwarsa.');
+
+                return [$live->first(), false];
             }
             $hold = config('payment.settlement_hold_days');
             abort_unless($hold === null || (ctype_digit((string) $hold) && (int) $hold <= 365), 503);
-            $fee = self::serviceFee((int) $bill->gross_amount);
-            $id = DB::table('payments')->insertGetId($base + ['bill_id' => $billId, 'order_id' => 'BD-'.Str::ulid(), 'provider' => 'IPAYMU',
+            $total = (int) $bills->sum('gross_amount');
+            $fee = self::serviceFee($total);
+            $id = DB::table('payments')->insertGetId($base + ['order_id' => 'BD-'.Str::ulid(), 'provider' => 'IPAYMU',
                 'merchant_id' => $this->gateway::merchantId(), 'production' => $this->gateway::production(),
-                'bill_amount' => $bill->gross_amount, 'service_fee' => $fee, 'gross_amount' => $bill->gross_amount + $fee,
+                'bill_amount' => $total, 'service_fee' => $fee, 'gross_amount' => $total + $fee,
                 'hold_days' => $hold, 'created_by' => $actor->id, 'next_check_at' => now()->addMinutes(2)]);
-            DB::table('payment_attempt_locks')->where('id', $guard->id)->update(['active_payment_id' => $id, 'updated_at' => now()]);
-            $this->audit->record($bill->banjar_id, $actor->id, 'payment.created', 'payments', $id, [], ['bill_id' => $billId, 'gross_amount' => $bill->gross_amount + $fee, 'amount' => $bill->gross_amount]);
+            DB::table('payment_items')->insert($bills->map(fn ($bill) => $base + ['payment_id' => $id, 'bill_id' => $bill->id, 'amount' => $bill->gross_amount])->all());
+            DB::table('payment_attempt_locks')->where('banjar_id', $banjar)->whereIn('bill_id', $billIds)->update(['active_payment_id' => $id, 'updated_at' => now()]);
+            $this->audit->record($banjar, $actor->id, 'payment.created', 'payments', $id, [], ['bill_ids' => $billIds, 'gross_amount' => $total + $fee, 'amount' => $total]);
 
             return [$id, true];
         }, 3);
@@ -87,19 +134,39 @@ final class PaymentManager
         return $id;
     }
 
-    /** Rincian untuk iPaymu: nilai tagihan dan biaya layanan sebagai dua baris, berlabel Banjar & nomor tagihan. */
+    /** Rincian tagihan suatu pembayaran beserta judul event-nya. */
+    public static function items(object $payment): Collection
+    {
+        return DB::table('payment_items as i')->join('bills as b', fn ($j) => $j->on('b.id', '=', 'i.bill_id')->on('b.banjar_id', '=', 'i.banjar_id'))
+            ->leftJoin('billing_events as e', fn ($j) => $j->on('e.id', '=', 'b.billing_event_id')->on('e.banjar_id', '=', 'b.banjar_id'))
+            ->where('i.payment_id', $payment->id)->orderBy('i.bill_id')
+            ->get(['i.bill_id', 'i.amount', 'b.kind', 'b.household_code', 'b.status as bill_status', 'e.title']);
+    }
+
+    /** Semua tagihan pembayaran ini lunas oleh pembayaran ini sendiri, dengan nominal yang cocok. */
+    public static function settlementsIntact(object $payment): bool
+    {
+        $items = DB::table('payment_items')->where('payment_id', $payment->id)->get();
+        $settled = DB::table('bill_settlements')->where('payment_id', $payment->id)->whereNull('reversed_at')->get()->keyBy('bill_id');
+
+        return $items->isNotEmpty() && $settled->count() === $items->count() && (int) $items->sum('amount') === (int) $payment->net_amount
+            && $items->every(fn ($item) => (int) ($settled->get($item->bill_id)->amount ?? -1) === (int) $item->amount)
+            && DB::table('bills')->whereIn('id', $items->pluck('bill_id'))->where('status', '<>', 'PAID')->doesntExist();
+    }
+
+    /** Rincian untuk iPaymu: satu baris per tagihan dan satu baris biaya layanan, berlabel Banjar & nomor tagihan. */
     private function buyer(User $actor, object $payment): array
     {
         $banjar = DB::table('banjars')->where('id', $payment->banjar_id)->value('name');
-        $title = DB::table('bills as b')->join('billing_events as e', fn ($j) => $j->on('e.id', '=', 'b.billing_event_id')->on('e.banjar_id', '=', 'b.banjar_id'))
-            ->where('b.id', $payment->bill_id)->value('e.title');
-        $label = mb_substr(($title ?: 'Tagihan').' · '.$banjar.' (tagihan #'.$payment->bill_id.')', 0, 200);
+        $bills = self::items($payment);
+        $numbers = '#'.$bills->pluck('bill_id')->implode(', #');
+        $label = mb_substr(($bills->count() === 1 ? ($bills->first()->title ?: 'Tagihan') : $bills->count().' tagihan').' · '.$banjar.' (tagihan '.$numbers.')', 0, 200);
         $phone = DB::table('krama')->where('banjar_id', $payment->banjar_id)->where('user_id', $actor->id)->value('phone');
         $phone = is_string($phone) ? preg_replace('/[^0-9]/', '', $phone) : '';
         $email = filter_var($actor->email, FILTER_VALIDATE_EMAIL) ? $actor->email : (string) config('payment.ipaymu.fallback_email');
-        $items = [['name' => $label, 'price' => (int) $payment->bill_amount]];
+        $items = $bills->map(fn ($bill) => ['name' => mb_substr(($bill->title ?: 'Tagihan').' · '.$banjar.' (tagihan #'.$bill->bill_id.')', 0, 200), 'price' => (int) $bill->amount])->all();
         if ((int) $payment->service_fee > 0) {
-            $items[] = ['name' => 'Biaya layanan QRIS', 'price' => (int) $payment->service_fee];
+            $items[] = ['name' => 'Biaya layanan aplikasi', 'price' => (int) $payment->service_fee];
         }
 
         return ['label' => $label, 'items' => $items, 'name' => $actor->name ?: 'Warga '.$banjar,
@@ -130,7 +197,8 @@ final class PaymentManager
     {
         $payment = DB::table('payments')->where('banjar_id', $this->tenant->id())->where('id', $id)->first();
         abort_unless($payment, 404);
-        $this->access->bill($actor, $payment->bill_id);
+        $billIds = DB::table('payment_items')->where('payment_id', $payment->id)->pluck('bill_id');
+        abort_unless($billIds->isNotEmpty() && $this->access->bills($actor)->whereIn('id', $billIds)->count() === $billIds->count(), 404);
 
         return $payment;
     }
@@ -163,12 +231,17 @@ final class PaymentManager
                 if ($payment->paid_at) {
                     return ! $payment->blocked && $payment->status === 'PAID';
                 }
-                $bill = DB::table('bills')->where('banjar_id', $payment->banjar_id)->where('id', $payment->bill_id)->firstOrFail();
-                $conflict = $payment->blocked || $bill->status !== 'UNPAID' || DB::table('bill_settlements')->where('banjar_id', $payment->banjar_id)->where('bill_id', $bill->id)->whereNull('reversed_at')->exists();
+                $items = DB::table('payment_items')->where('payment_id', $payment->id)->orderBy('bill_id')->get();
+                $bills = DB::table('bills')->where('banjar_id', $payment->banjar_id)->whereIn('id', $items->pluck('bill_id'))->get()->keyBy('id');
+                $settled = DB::table('bill_settlements')->where('banjar_id', $payment->banjar_id)->whereIn('bill_id', $items->pluck('bill_id'))->whereNull('reversed_at')->pluck('bill_id')->flip();
+                // Tagihan yang sudah lunas lewat jalur lain (tunai/QRIS lain) tidak dilunasi lagi; uangnya ditahan di EXCEPTION.
+                $payable = $payment->blocked ? collect() : $items->filter(fn ($item) => ($bills->get($item->bill_id)->status ?? null) === 'UNPAID' && ! $settled->has($item->bill_id));
+                $conflict = $items->isEmpty() || $payable->count() !== $items->count();
                 $billAmount = (int) $payment->bill_amount;
                 $serviceFee = (int) $payment->service_fee;
+                $toBanjar = (int) $payable->sum('amount');
                 // Nilai tagihan milik Banjar; biaya layanan milik platform. Pembayaran ganda/konflik ditahan di EXCEPTION.
-                $this->ledger->post($payment, 'received', ['CLEARING' => (int) $payment->gross_amount], array_filter([$conflict ? 'EXCEPTION' : 'PENDING' => $billAmount, 'PLATFORM' => $serviceFee]));
+                $this->ledger->post($payment, 'received', ['CLEARING' => (int) $payment->gross_amount], array_filter(['PENDING' => $toBanjar, 'EXCEPTION' => $billAmount - $toBanjar, 'PLATFORM' => $serviceFee]));
                 $gatewayFee = $data['fee'];
                 if (is_int($gatewayFee) && $gatewayFee > 0 && $gatewayFee <= $serviceFee) {
                     $this->ledger->post($payment, 'fee', ['PLATFORM' => $gatewayFee], ['FEE' => $gatewayFee]);
@@ -180,12 +253,14 @@ final class PaymentManager
                 if (is_int($gatewayFee) && $gatewayFee > $serviceFee) {
                     DB::table('reconciliation_items')->insertOrIgnore(['banjar_id' => $payment->banjar_id, 'payment_id' => $payment->id, 'code' => 'FEE_EXCEEDS_SERVICE', 'created_at' => now(), 'updated_at' => now()]);
                 }
-                if ($conflict) {
-                    $this->block($payment, 'SETTLEMENT_CONFLICT');
-                } else {
-                    DB::table('bill_settlements')->insert(['banjar_id' => $payment->banjar_id, 'bill_id' => $bill->id, 'method' => 'GATEWAY', 'amount' => $billAmount,
+                foreach ($payable as $item) {
+                    DB::table('bill_settlements')->insert(['banjar_id' => $payment->banjar_id, 'bill_id' => $item->bill_id, 'method' => 'GATEWAY', 'amount' => $item->amount,
                         'payment_id' => $payment->id, 'created_by' => $payment->created_by, 'created_at' => now(), 'updated_at' => now()]);
-                    DB::table('bills')->where('id', $bill->id)->update(['status' => 'PAID', 'updated_at' => now()]);
+                }
+                DB::table('bills')->whereIn('id', $payable->pluck('bill_id'))->update(['status' => 'PAID', 'updated_at' => now()]);
+                if ($conflict) {
+                    // Tagihan lain dalam QRIS ini tetap lunas; dana pembayaran ini ditahan sampai diperiksa Bali Santih.
+                    $this->block($payment, 'SETTLEMENT_CONFLICT');
                 }
                 $this->audit->record($payment->banjar_id, null, 'payment.received', 'payments', $payment->id, [], ['status' => $conflict ? 'EXCEPTION' : 'PAID', 'gross_amount' => $payment->gross_amount, 'amount' => $billAmount]);
 

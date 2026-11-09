@@ -31,6 +31,7 @@ Route::get('/brand/{banjar}/{file}', [PwaController::class, 'icon'])->whereNumbe
 Route::post('/webhooks/ipaymu', [PaymentController::class, 'webhook'])->middleware('throttle:120,1');
 Route::middleware(['access:tenant', 'module:PAYMENT', 'module:FINANCE', 'module:KRAMA'])->group(function () {
     Route::get('/payments', [PaymentController::class, 'index']);
+    Route::post('/payments', [PaymentController::class, 'createMany'])->middleware('throttle:10,1');
     Route::post('/payments/bills/{id}', [PaymentController::class, 'create'])->whereNumber('id')->middleware('throttle:10,1');
     Route::get('/payments/{id}', [PaymentController::class, 'show'])->whereNumber('id');
     Route::post('/payments/{id}/refresh', [PaymentController::class, 'refresh'])->whereNumber('id')->middleware('throttle:10,1');

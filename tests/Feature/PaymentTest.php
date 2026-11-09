@@ -20,8 +20,8 @@ use Tests\Support\FinanceFixture;
 use Tests\Support\IpaymuFake;
 use Tests\TestCase;
 
-// QRIS lewat iPaymu (§29, §43): warga membayar tagihan + biaya layanan 3,5%; Banjar menerima tagihan utuh;
-// biaya layanan dikurangi biaya iPaymu adalah pendapatan platform. Status lunas hanya dari API iPaymu.
+// QRIS lewat iPaymu (§29, §43): warga membayar satu/beberapa tagihan sekaligus + biaya layanan aplikasi bertingkat;
+// Banjar menerima tagihan utuh; biaya layanan dikurangi biaya iPaymu adalah pendapatan platform. Status lunas hanya dari API iPaymu.
 class PaymentTest extends TestCase
 {
     use RefreshDatabase;
@@ -111,17 +111,81 @@ class PaymentTest extends TestCase
         }
     }
 
-    public function test_service_fee_is_three_and_a_half_percent_rounded_up_to_the_rupiah(): void
+    public function test_service_fee_is_tiered_and_always_covers_the_ipaymu_fee(): void
     {
-        $this->assertSame([1750, 70, 4, 1, 0], [PaymentManager::serviceFee(50000), PaymentManager::serviceFee(2000), PaymentManager::serviceFee(100), PaymentManager::serviceFee(1), PaymentManager::serviceFee(0)]);
-        config(['payment.service_fee_percent' => 0]);
+        $totals = [0, 2000, 10000, 10001, 50000, 56000, 200000, 200001, 500000, 500001, 1000000, 1234567];
+        $this->assertSame([0, 500, 500, 1000, 1000, 2000, 2000, 5000, 5000, 5001, 10000, 12346], array_map(fn ($t) => PaymentManager::serviceFee($t), $totals));
+        // Biaya iPaymu 0,7% (ditambah PPN 11%) dari total yang dibayar warga selalu tertutup biaya layanan.
+        foreach ([1, 2000, 10000, 50000, 200000, 500000, 500001, 5000000] as $total) {
+            $fee = PaymentManager::serviceFee($total);
+            $this->assertGreaterThan(($total + $fee) * 0.007 * 1.11, $fee, 'Total '.$total);
+        }
+        config(['payment.service_fee_tiers' => '', 'payment.service_fee_above_percent' => 0]);
         $this->assertSame(0, PaymentManager::serviceFee(50000));
+    }
+
+    public function test_several_bills_are_paid_with_one_qris_and_one_service_fee(): void
+    {
+        $finance = app(FinanceManager::class);
+        $kesinoman = User::findOrFail($this->fixture['users']['KESINOMAN']);
+        $this->context();
+        $small = $finance->event($kesinoman, ['billing_type_id' => $this->fixture['type'], 'title' => 'Dedosan tidak hadir', 'reference' => 'DD-2000', 'amount' => '2000', 'event_date' => now('Asia/Makassar')->toDateString()]);
+        $finance->issue($kesinoman, $small);
+        $household = DB::table('bills')->where('id', $this->bill)->value('kk_id');
+        $bills = DB::table('bills')->where('kk_id', $household)->orderBy('id')->pluck('id')->all();
+        $this->assertCount(2, $bills);
+        $payer = FinanceFixture::payer($this->fixture['tenant'], $this->bill);
+        $this->context();
+        $id = app(PaymentManager::class)->create($payer, array_reverse($bills));
+        $p = DB::table('payments')->find($id);
+        $this->assertSame([52000, 2000, 54000], [(int) $p->bill_amount, (int) $p->service_fee, (int) $p->gross_amount]);
+        $this->assertSame([50000, 2000], DB::table('payment_items')->where('payment_id', $id)->orderBy('bill_id')->pluck('amount')->map(fn ($v) => (int) $v)->all());
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/payment/direct') && json_decode($request->body(), true)['price'] === [50000, 2000, 2000]
+            && str_contains(json_decode($request->body(), true)['comments'], '2 tagihan'));
+        // Pilihan yang sama memakai QRIS yang sama; pilihan lain yang beririsan ditolak sampai QRIS itu selesai.
+        $this->assertSame($id, app(PaymentManager::class)->create($payer, $bills));
+        $this->rejected(fn () => app(PaymentManager::class)->create($payer, [$bills[1]]), 409);
+
+        $this->ipaymu->fee = 380;
+        $this->ipaymu->statuses[$p->order_id] = 1;
+        app(PaymentManager::class)->sync($id);
+        $this->assertSame(['PAID', 'PAID'], DB::table('bills')->whereIn('id', $bills)->orderBy('id')->pluck('status')->all());
+        $this->assertSame([50000, 2000], DB::table('bill_settlements')->where('payment_id', $id)->orderBy('bill_id')->pluck('amount')->map(fn ($v) => (int) $v)->all());
+        $this->assertSame([52000, 1620, 380, -54000], [$this->balance('PENDING'), $this->balance('PLATFORM'), $this->balance('FEE'), $this->balance('CLEARING')]);
+        $this->travel(3)->days();
+        app(SettlementManager::class)->release($id);
+        $this->assertSame(52000, $this->balance('AVAILABLE'));
+        $this->travelBack();
+        $this->tenantSession($payer)->get('http://financeqa.localhost/payments/'.$id)->assertOk()
+            ->assertSeeInOrder(['2 tagihan dibayar sekaligus', 'Iuran September 2026', 'Rp 50.000', 'Dedosan tidak hadir', 'Rp 2.000', 'Nilai tagihan', 'Rp 52.000', 'Biaya layanan aplikasi', 'Rp 2.000', 'Total dibayar', 'Rp 54.000']);
+    }
+
+    public function test_bill_paid_in_cash_meanwhile_keeps_the_other_bills_paid_and_holds_the_money(): void
+    {
+        $finance = app(FinanceManager::class);
+        $kesinoman = User::findOrFail($this->fixture['users']['KESINOMAN']);
+        $this->context();
+        $small = $finance->event($kesinoman, ['billing_type_id' => $this->fixture['type'], 'title' => 'Dedosan tidak hadir', 'reference' => 'DD-2000', 'amount' => '2000', 'event_date' => now('Asia/Makassar')->toDateString()]);
+        $finance->issue($kesinoman, $small);
+        $bills = DB::table('bills')->where('kk_id', DB::table('bills')->where('id', $this->bill)->value('kk_id'))->orderBy('id')->pluck('id')->all();
+        $payer = FinanceFixture::payer($this->fixture['tenant'], $this->bill);
+        $this->context();
+        $p = DB::table('payments')->find(app(PaymentManager::class)->create($payer, $bills));
+        $finance->settle($this->actor, $bills[1], ['cash_account_id' => $this->fixture['account'], 'submission_key' => (string) Str::uuid(), 'transaction_date' => now('Asia/Makassar')->toDateString(), 'reference' => 'CASH-2000']);
+        $this->ipaymu->statuses[$p->order_id] = 1;
+        app(PaymentManager::class)->sync($p->id);
+        $this->assertDatabaseHas('bills', ['id' => $bills[0], 'status' => 'PAID']);
+        $this->assertDatabaseHas('bill_settlements', ['payment_id' => $p->id, 'bill_id' => $bills[0], 'amount' => 50000]);
+        $this->assertDatabaseMissing('bill_settlements', ['payment_id' => $p->id, 'bill_id' => $bills[1]]);
+        $this->assertSame([50000, 2000], [$this->balance('PENDING'), $this->balance('EXCEPTION')]);
+        $this->assertDatabaseHas('payments', ['id' => $p->id, 'status' => 'EXCEPTION', 'blocked' => true]);
+        $this->assertDatabaseHas('reconciliation_items', ['payment_id' => $p->id, 'code' => 'SETTLEMENT_CONFLICT']);
     }
 
     public function test_charge_adds_service_fee_signs_request_and_reuses_active_attempt(): void
     {
         $p = $this->create();
-        $this->assertSame(['PENDING', 50000, 1750, 51750], [$p->status, (int) $p->bill_amount, (int) $p->service_fee, (int) $p->gross_amount]);
+        $this->assertSame(['PENDING', 50000, 1000, 51000], [$p->status, (int) $p->bill_amount, (int) $p->service_fee, (int) $p->gross_amount]);
         $this->assertSame(IpaymuFake::transactionId($p), $p->provider_transaction_id);
         $this->assertNotEmpty($p->qr_string);
         $this->assertSame($p->id, $this->create()->id);
@@ -131,7 +195,7 @@ class PaymentTest extends TestCase
             $signature = hash_hmac('sha256', 'POST:'.IpaymuFake::VA.':'.strtolower(hash('sha256', $request->body())).':'.IpaymuFake::KEY, IpaymuFake::KEY);
 
             return str_ends_with($request->url(), 'sandbox.ipaymu.com/api/v2/payment/direct') && $request->header('signature')[0] === $signature && $request->header('va')[0] === IpaymuFake::VA
-                && $body['amount'] === 51750 && $body['price'] === [50000, 1750] && $body['paymentMethod'] === 'qris' && $body['feeDirection'] === 'MERCHANT'
+                && $body['amount'] === 51000 && $body['price'] === [50000, 1000] && $body['product'][1] === 'Biaya layanan aplikasi' && $body['paymentMethod'] === 'qris' && $body['feeDirection'] === 'MERCHANT'
                 && $body['notifyUrl'] === rtrim((string) config('app.url'), '/').'/webhooks/ipaymu' && str_contains($body['product'][0], 'Banjar Uji Keuangan');
         });
         $this->assertDatabaseCount('payments', 1);
@@ -142,11 +206,11 @@ class PaymentTest extends TestCase
     {
         $this->ipaymu->fee = 600;
         $p = $this->paid();
-        $this->assertSame(['PAID', 50000, 600, 1150], [$p->status, (int) $p->net_amount, (int) $p->gateway_fee, (int) $p->platform_fee]);
+        $this->assertSame(['PAID', 50000, 600, 400], [$p->status, (int) $p->net_amount, (int) $p->gateway_fee, (int) $p->platform_fee]);
         $this->assertSame(50000, $this->balance('PENDING'), 'Banjar menerima nilai tagihan utuh.');
-        $this->assertSame(1150, $this->balance('PLATFORM'));
+        $this->assertSame(400, $this->balance('PLATFORM'));
         $this->assertSame(600, $this->balance('FEE'));
-        $this->assertSame(-51750, $this->balance('CLEARING'));
+        $this->assertSame(-51000, $this->balance('CLEARING'));
         $this->assertDatabaseHas('bill_settlements', ['payment_id' => $p->id, 'method' => 'GATEWAY', 'amount' => 50000]);
         $this->assertDatabaseHas('bills', ['id' => $this->bill, 'status' => 'PAID']);
     }
@@ -198,7 +262,7 @@ class PaymentTest extends TestCase
         $this->assertDatabaseCount('bill_settlements', 1);
         $this->assertDatabaseCount('financial_ledger_transactions', 1);
         $this->assertDatabaseCount('cash_transactions', 0);
-        $this->assertSame([50000, 1750, -51750, 0], [$this->balance('PENDING'), $this->balance('PLATFORM'), $this->balance('CLEARING'), $this->balance('AVAILABLE')]);
+        $this->assertSame([50000, 1000, -51000, 0], [$this->balance('PENDING'), $this->balance('PLATFORM'), $this->balance('CLEARING'), $this->balance('AVAILABLE')]);
     }
 
     public function test_unknown_or_mismatched_callbacks_and_wrong_host_are_rejected(): void
@@ -245,7 +309,7 @@ class PaymentTest extends TestCase
 
     public function test_amount_reference_and_transaction_mismatches_block_credit(): void
     {
-        foreach (['Amount' => 51749, 'ReferenceId' => 'BD-OTHER', 'TransactionId' => 123] as $field => $value) {
+        foreach (['Amount' => 50999, 'ReferenceId' => 'BD-OTHER', 'TransactionId' => 123] as $field => $value) {
             $p = $this->create();
             $this->ipaymu->statuses[$p->order_id] = 1;
             $this->ipaymu->overrides = [$field => $value];
@@ -262,7 +326,7 @@ class PaymentTest extends TestCase
         app(FinanceManager::class)->settle($this->actor, $this->bill, ['cash_account_id' => $this->fixture['account'], 'submission_key' => (string) Str::uuid(), 'transaction_date' => now('Asia/Makassar')->toDateString(), 'reference' => 'CASH-TEST']);
         $this->ipaymu->statuses[$p->order_id] = 1;
         app(PaymentManager::class)->sync($p->id);
-        $this->assertSame([50000, 0, 1750], [$this->balance('EXCEPTION'), $this->balance('PENDING'), $this->balance('PLATFORM')]);
+        $this->assertSame([50000, 0, 1000], [$this->balance('EXCEPTION'), $this->balance('PENDING'), $this->balance('PLATFORM')]);
         $this->assertDatabaseCount('bill_settlements', 1);
         $this->assertDatabaseHas('reconciliation_items', ['payment_id' => $p->id, 'code' => 'SETTLEMENT_CONFLICT']);
     }
@@ -339,10 +403,10 @@ class PaymentTest extends TestCase
         $host = 'http://financeqa.localhost';
         $this->tenantSession($krama)->get($host.'/payments')->assertOk()->assertSee('KK-QA-001')->assertDontSee('KK-QA-002');
         $this->tenantSession($krama)->get($host.'/payments/'.$p->id)->assertOk()->assertHeader('Cache-Control', 'max-age=0, no-store, private')
-            ->assertSeeInOrder(['Nilai tagihan', 'Rp 50.000', 'Biaya layanan QRIS', 'Rp 1.750', 'Total dibayar', 'Rp 51.750'])
+            ->assertSeeInOrder(['Iuran September 2026', 'Rp 50.000', 'Biaya layanan aplikasi', 'Rp 1.000', 'Total dibayar', 'Rp 51.000'])
             ->assertSee('data-qris="'.$p->qr_string.'"', false);
         $other = DB::table('bills')->where('id', '<>', $this->bill)->value('id');
-        $this->tenantSession($krama)->get($host.'/payments')->assertSee('biaya layanan Rp 1.750')->assertSee('Rp 51.750')->assertSee('Bayar tunai ke Petengen tanpa biaya');
+        $this->tenantSession($krama)->get($host.'/payments')->assertSee('Menunggu QRIS #'.$p->id)->assertSee('Bayar tunai ke Petengen tanpa biaya');
         $this->tenantSession($krama)->post($host.'/payments/bills/'.$other)->assertNotFound();
         $this->tenantSession($krama)->get($host.'/admin/payments')->assertForbidden();
         $this->tenantSession()->get($host.'/admin/payments')->assertOk()->assertDontSee('Biaya gateway');
@@ -364,9 +428,9 @@ class PaymentTest extends TestCase
         $p = $this->paid();
         $super = $this->platformUser();
         $this->actingAs($super, 'platform')->withSession(['auth_host' => 'admin.banjar.localhost', 'auth_context' => 'platform'])->get('http://admin.banjar.localhost/platform/payments')->assertOk()
-            ->assertSee('Pendapatan layanan QRIS')->assertSee('Rp 1.250')->assertSee('Rp 500');
+            ->assertSee('Pendapatan layanan aplikasi')->assertSee('Rp 500');
         $this->actingAs($super, 'platform')->withSession(['auth_host' => 'admin.banjar.localhost', 'auth_context' => 'platform'])->get('http://admin.banjar.localhost/platform/payments/'.$p->id)->assertOk()
-            ->assertSeeInOrder(['Dibayar warga', 'Rp 51.750', 'Untuk Banjar', 'Rp 50.000', 'Biaya layanan', 'Rp 1.750', 'Biaya iPaymu', 'Rp 500', 'Pendapatan platform', 'Rp 1.250']);
+            ->assertSeeInOrder(['Dibayar warga', 'Rp 51.000', 'Untuk Banjar', 'Rp 50.000', 'Biaya layanan aplikasi', 'Rp 1.000', 'Biaya iPaymu', 'Rp 500', 'Pendapatan platform', 'Rp 500']);
     }
 
     public function test_reconciliation_command_processes_inbox_and_detects_local_mismatch(): void
@@ -376,7 +440,7 @@ class PaymentTest extends TestCase
         app(PaymentManager::class)->receive($this->notice($p));
         $this->artisan('payments:reconcile')->assertSuccessful();
         $this->assertDatabaseHas('payments', ['id' => $p->id, 'status' => 'PAID']);
-        DB::table('bills')->where('id', $p->bill_id)->update(['status' => 'UNPAID']);
+        DB::table('bills')->where('id', $this->bill)->update(['status' => 'UNPAID']);
         DB::table('payments')->where('id', $p->id)->update(['next_check_at' => now()->subMinute()]);
         $this->artisan('payments:reconcile')->assertSuccessful();
         $this->assertDatabaseHas('reconciliation_items', ['payment_id' => $p->id, 'code' => 'LOCAL_INTEGRITY']);

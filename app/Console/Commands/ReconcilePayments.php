@@ -67,8 +67,7 @@ final class ReconcilePayments extends Command
                 $valid = $valid && $entries->where('direction', 'DEBIT')->sum('amount') === $entries->where('direction', 'CREDIT')->sum('amount');
             }
             if ($payment->status === 'PAID') {
-                $settlement = DB::table('bill_settlements')->where('payment_id', $payment->id)->whereNull('reversed_at')->first();
-                $valid = $valid && $settlement && (int) $settlement->amount === (int) ($payment->bill_amount ?? $payment->gross_amount) && DB::table('bills')->where('id', $payment->bill_id)->value('status') === 'PAID';
+                $valid = $valid && PaymentManager::settlementsIntact($payment);
             }
             if (! $valid) {
                 app(PaymentManager::class)->flagIntegrity($payment->id);

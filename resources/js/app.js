@@ -1,4 +1,5 @@
 import { shouldInvitePush } from './push-invite.js';
+import { serviceFee } from './service-fee.js';
 
 if ('serviceWorker' in navigator && window.isSecureContext) {
     window.addEventListener('load', () => {
@@ -27,6 +28,27 @@ window.addEventListener('pageshow', () => {
         button.textContent = button.dataset.originalText;
         delete button.dataset.originalText;
     });
+});
+
+// Bayar sekaligus: ringkasan tagihan dicentang + biaya layanan aplikasi bertingkat (server tetap menghitung ulang).
+document.querySelectorAll('form[data-qris-select]').forEach((form) => {
+    let tiers = [];
+    try { tiers = JSON.parse(form.dataset.feeTiers || '[]'); } catch { tiers = []; }
+    const above = Number(form.dataset.feeAbove || 0);
+    const rupiah = (value) => `Rp ${value.toLocaleString('id-ID')}`;
+    const set = (selector, text) => form.querySelectorAll(selector).forEach((el) => { el.textContent = text; });
+    const update = () => {
+        const checked = [...form.querySelectorAll('input[name="bill_ids[]"]:checked')];
+        const bills = checked.reduce((sum, box) => sum + Number(box.dataset.amount || 0), 0);
+        const fee = serviceFee(bills, tiers, above);
+        set('[data-qris-count]', String(checked.length));
+        set('[data-qris-bills]', rupiah(bills));
+        set('[data-qris-fee]', rupiah(fee));
+        set('[data-qris-total]', rupiah(bills + fee));
+        form.querySelectorAll('[data-qris-submit]').forEach((button) => { button.disabled = checked.length === 0; });
+    };
+    form.addEventListener('change', update);
+    update();
 });
 
 // QRIS iPaymu dikirim sebagai teks (QrString); gambar QR-nya dibuat di sini.

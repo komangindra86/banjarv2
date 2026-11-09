@@ -32,7 +32,7 @@ final class IpaymuFake
     public static function configure(array $extra = []): void
     {
         config($extra + ['payment.enabled' => true, 'payment.ipaymu.va' => self::VA, 'payment.ipaymu.api_key' => self::KEY, 'payment.ipaymu.sandbox' => true,
-            'payment.service_fee_percent' => 3.5, 'payment.settlement_hold_days' => 2]);
+            'payment.service_fee_tiers' => '10000:500,50000:1000,200000:2000,500000:5000', 'payment.service_fee_above_percent' => 1, 'payment.settlement_hold_days' => 2]);
     }
 
     public static function transactionId(object $payment): string

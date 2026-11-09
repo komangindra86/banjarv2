@@ -40,8 +40,7 @@ final class SettlementManager
             if ($payment->status !== 'PAID' || $payment->blocked || $payment->released_at || ! $payment->available_at || Carbon::parse($payment->available_at)->isFuture()) {
                 return;
             }
-            abort_unless(DB::table('bill_settlements')->where('payment_id', $payment->id)->whereNull('reversed_at')->where('amount', $payment->net_amount)->exists()
-                && DB::table('bills')->where('id', $payment->bill_id)->value('status') === 'PAID', 409);
+            abort_unless(PaymentManager::settlementsIntact($payment), 409);
             $this->ledger->post($payment, 'available', ['PENDING' => (int) $payment->net_amount], ['AVAILABLE' => (int) $payment->net_amount]);
             DB::table('payments')->where('id', $payment->id)->update(['released_at' => now(), 'updated_at' => now()]);
             $this->audit->record($payment->banjar_id, null, 'payment.available', 'payments', $payment->id, [], ['amount' => $payment->net_amount]);

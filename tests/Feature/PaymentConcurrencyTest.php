@@ -97,13 +97,13 @@ class PaymentConcurrencyTest extends TestCase
         $ledger = app(LedgerService::class);
         $this->assertSame(50000, $ledger->balance($fixture['tenant'], 'AVAILABLE'));
         $this->assertSame(0, $ledger->balance($fixture['tenant'], 'PENDING'));
-        $this->assertSame(1750, $ledger->balance($fixture['tenant'], 'PLATFORM'));
+        $this->assertSame(1000, $ledger->balance($fixture['tenant'], 'PLATFORM'));
         $this->assertDatabaseCount('financial_ledger_transactions', 2);
 
         $bill2 = DB::table('bills')->where('status', 'UNPAID')->orderBy('id')->value('id');
         $create2 = ['action' => 'payment-create', 'id' => $bill2, 'actor' => FinanceFixture::payer($fixture['tenant'], $bill2)->id] + $base;
         $this->assertSame(['SUCCESS', 'SUCCESS'], $this->race($create2, $create2));
-        $id2 = DB::table('payments')->where('bill_id', $bill2)->value('id');
+        $id2 = DB::table('payment_items')->where('bill_id', $bill2)->value('payment_id');
         $input = ['cash_account_id' => $fixture['account'], 'transaction_date' => now('Asia/Makassar')->toDateString(), 'reference' => 'RACE-GATEWAY', 'submission_key' => (string) Str::uuid()];
         $results = $this->race($base + ['action' => 'payment-sync', 'id' => $id2], $base + ['action' => 'settle', 'id' => $bill2, 'input' => $input]);
         $this->assertContains($results, [['REJECTED', 'SUCCESS'], ['SUCCESS', 'SUCCESS']]);
