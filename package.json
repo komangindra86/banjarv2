@@ -5,7 +5,7 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
-        "test": "node tests/pwa.test.mjs"
+        "test": "node --test tests/pwa.test.mjs tests/push-invite.test.mjs"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",

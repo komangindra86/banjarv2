@@ -1,3 +1,5 @@
+import { shouldInvitePush } from './push-invite.js';
+
 if ('serviceWorker' in navigator && window.isSecureContext) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(() => {
@@ -378,31 +380,39 @@ document.querySelectorAll('[data-select-all-suggested]').forEach((button) => {
     });
 });
 
+// Notifikasi push: berlangganan dipakai bersama oleh tombol di halaman Notifikasi dan ajakan di beranda portal.
+const pushSupported = 'serviceWorker' in navigator && window.isSecureContext && 'PushManager' in window && 'Notification' in window;
+const pushPost = (path, body) => fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content, Accept: 'application/json' },
+    body: JSON.stringify(body),
+});
+const urlBase64ToUint8Array = (base64) => {
+    const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+    const raw = window.atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+};
+const subscribePush = async (registration, vapidKey) => {
+    const sub = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey) });
+    const json = sub.toJSON();
+    const response = await pushPost('/notifications/subscribe', { endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth, user_agent: navigator.userAgent.slice(0, 255) });
+    if (!response.ok) throw new Error('subscribe failed');
+    return sub;
+};
+
 const pushToggle = document.querySelector('#push-toggle');
-if (pushToggle && 'serviceWorker' in navigator && window.isSecureContext && 'PushManager' in window) {
+if (pushToggle && pushSupported) {
     const status = document.querySelector('#push-status');
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-    const urlBase64ToUint8Array = (base64) => {
-        const padding = '='.repeat((4 - (base64.length % 4)) % 4);
-        const raw = window.atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'));
-        return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
-    };
-    const post = (path, body) => fetch(path, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, Accept: 'application/json' }, body: JSON.stringify(body),
-    });
     const refresh = async () => {
         const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.getSubscription();
         pushToggle.hidden = false;
-        // Kartu ajakan di beranda portal hanya tampil selama push belum aktif di perangkat ini.
-        const card = pushToggle.closest('[data-push-card]');
-        if (card?.hasAttribute('data-hide-when-active')) card.hidden = Boolean(subscription);
         if (subscription) {
             status.textContent = 'Notifikasi push aktif di perangkat ini.';
             pushToggle.textContent = 'Nonaktifkan notifikasi push';
             pushToggle.onclick = async () => {
                 await subscription.unsubscribe();
-                await post('/notifications/unsubscribe', { endpoint: subscription.endpoint });
+                await pushPost('/notifications/unsubscribe', { endpoint: subscription.endpoint });
                 refresh();
             };
         } else {
@@ -410,11 +420,7 @@ if (pushToggle && 'serviceWorker' in navigator && window.isSecureContext && 'Pus
             pushToggle.textContent = 'Aktifkan notifikasi push';
             pushToggle.onclick = async () => {
                 try {
-                    const sub = await registration.pushManager.subscribe({
-                        userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(pushToggle.dataset.vapidKey),
-                    });
-                    const json = sub.toJSON();
-                    await post('/notifications/subscribe', { endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth, user_agent: navigator.userAgent.slice(0, 255) });
+                    await subscribePush(registration, pushToggle.dataset.vapidKey);
                     refresh();
                 } catch {
                     status.textContent = 'Izin notifikasi ditolak atau tidak tersedia di perangkat ini.';
@@ -423,4 +429,41 @@ if (pushToggle && 'serviceWorker' in navigator && window.isSecureContext && 'Pus
         }
     };
     refresh().catch(() => { status.textContent = 'Notifikasi push tidak tersedia di perangkat ini.'; });
+}
+
+// Ajakan push di beranda portal (modal). Muncul hanya bila push belum aktif dan izin belum ditolak. "Nanti saja"
+// (atau menutup modal) menunda 30 hari; dalam satu kunjungan modal paling banyak muncul sekali.
+const pushInvite = document.querySelector('dialog[data-push-invite]');
+if (pushInvite && pushSupported && Notification.permission !== 'denied') {
+    const LATER_KEY = 'banjar-push-invite-later-at';
+    const SHOWN_KEY = 'banjar-push-invite-shown';
+    const read = (storage, key) => { try { return storage.getItem(key); } catch { return null; } };
+    const write = (storage, key, value) => { try { storage.setItem(key, value); } catch { /* penyimpanan diblokir: abaikan */ } };
+    const status = pushInvite.querySelector('[data-push-invite-status]');
+    let accepted = false;
+    const later = () => { if (!accepted) write(localStorage, LATER_KEY, String(Date.now())); };
+    pushInvite.querySelector('[data-push-invite-later]')?.addEventListener('click', () => { later(); pushInvite.close(); });
+    pushInvite.addEventListener('cancel', later);
+    (async () => {
+        const registration = await navigator.serviceWorker.ready;
+        const subscribed = Boolean(await registration.pushManager.getSubscription());
+        if (!shouldInvitePush({ permission: Notification.permission, subscribed, shownThisVisit: Boolean(read(sessionStorage, SHOWN_KEY)), laterAt: read(localStorage, LATER_KEY) })) return;
+        write(sessionStorage, SHOWN_KEY, '1');
+        pushInvite.querySelector('[data-push-invite-accept]')?.addEventListener('click', async (event) => {
+            const button = event.currentTarget;
+            button.disabled = true;
+            status.textContent = 'Menunggu izin dari HP…';
+            try {
+                await subscribePush(registration, pushInvite.dataset.vapidKey);
+                accepted = true;
+                pushInvite.close();
+            } catch {
+                // Izin ditolak: jangan tanyakan lagi selama 30 hari (bila diblokir permanen, modal tidak muncul lagi).
+                later();
+                status.textContent = 'Izin notifikasi tidak diberikan. Anda dapat mengaktifkannya nanti di menu Notifikasi.';
+                button.disabled = false;
+            }
+        });
+        pushInvite.showModal();
+    })().catch(() => {});
 }

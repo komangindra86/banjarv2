@@ -286,7 +286,10 @@ class CentralPortalTest extends TestCase
         config(['webpush.enabled' => false]);
         $this->get($this->portal.'/portal/beranda')->assertOk()->assertDontSee('Dapatkan pemberitahuan di HP');
         config(['webpush.enabled' => true, 'webpush.public_key' => 'kunci-publik-uji']);
-        $this->get($this->portal.'/portal/beranda')->assertOk()->assertSee('Dapatkan pemberitahuan di HP')->assertSee('data-vapid-key="kunci-publik-uji"', false);
+        // Berupa modal (dibuka oleh app.js bila push belum aktif) dengan pilihan "Nanti saja" yang menunda 30 hari.
+        $this->get($this->portal.'/portal/beranda')->assertOk()->assertSee('Dapatkan pemberitahuan di HP')
+            ->assertSee('<dialog class="card form-width" data-push-invite data-vapid-key="kunci-publik-uji"', false)
+            ->assertSee('data-push-invite-later', false)->assertDontSee('id="push-toggle"', false);
         $this->module($this->tenant, 'NOTIFICATION', 'INACTIVE');
         $this->get($this->portal.'/portal/beranda')->assertOk()->assertDontSee('Dapatkan pemberitahuan di HP');
     }

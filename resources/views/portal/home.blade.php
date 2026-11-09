@@ -3,7 +3,7 @@
 @section('content')
 <div class="page-heading"><div><span class="eyebrow">PORTAL KRAMA</span><h1>{{ $self ? 'Rahajeng, '.$self->name : 'Rahajeng rauh' }}</h1><p class="muted">{{ $currentBanjar->name }}</p></div></div>
 @if($vapidPublicKey)
-@include('notifications.push', ['compact' => true])
+@include('notifications.push-invite')
 @endif
 @if($announcements->isNotEmpty())
 <div class="flex items-center justify-between gap-3 mb-2"><span class="eyebrow">PENGUMUMAN</span><a class="text-link text-sm" href="/portal/pengumuman">Semua pengumuman →</a></div>

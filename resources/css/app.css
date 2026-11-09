@@ -31,7 +31,7 @@
 .inline-links a[aria-current] { border-color: var(--banjar-accent, #b94715); }
 .touch-link { display: inline-flex; align-items: center; min-height: 44px; }
 .field-error { font-size: .875rem; color: #a32828; font-weight: 400; }
-dialog { max-width: min(92vw, 32rem); }
+dialog { max-width: min(92vw, 32rem); margin: auto; }
 dialog::backdrop { background: rgba(30, 24, 18, .45); }
 
 .check-option { display: flex; align-items: center; gap: 12px; min-height: 48px; border-bottom: 1px solid #e8e1d9; }
