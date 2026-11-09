@@ -401,8 +401,9 @@ final class FinanceController extends Controller
         $this->access->authorize($request->user());
         $report = $reports->row($id);
         $data = $reports->compute($report);
+        $signers = $reports->signers($request->user());
 
-        return view('finance.reports.show', compact('report', 'data'));
+        return view('finance.reports.show', compact('report', 'data', 'signers'));
     }
 
     public function finalizeReport(Request $request, int $id, FinanceReportManager $reports)

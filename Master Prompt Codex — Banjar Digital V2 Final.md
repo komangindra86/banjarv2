@@ -983,6 +983,13 @@ Laporan mendukung periode tanggal bebas, nama agenda/sangkep, tanggal sangkep, d
 
 Tampilkan baris **SALDO PINDAHAN SANGKEP TGL. ...** sebelum rincian periode. Saldo awal berasal dari penutupan sebelumnya atau saldo awal migrasi yang memiliki rincian dan bukti. Saldo awal tidak dihitung sebagai pendapatan periode berjalan.
 
+Petengen cukup mengisi **nama sangkep** dan **tanggal sangkep**; sistem menentukan sisanya dari buku kas:
+- periode mulai = sehari setelah akhir laporan final sebelumnya; periode akhir = tanggal sangkep;
+- saldo pindahan = saldo akhir laporan sebelumnya;
+- laporan pertama: saldo awal Banjar sudah dicatat di buku kas (tidak diisi dua kali) — semua yang tercatat pada hari pertama buku kas menjadi saldo pindahan, periode mulai keesokan harinya;
+- selama masih ada draf laporan, laporan baru tidak dapat dibuat;
+- nama penanda tangan diisi otomatis dari akun Petengen (yang memfinalkan) dan Kelian Adat aktif, dapat diubah sebelum finalisasi.
+
 Definisikan batas penutupan secara eksplisit. Jika laporan sebelumnya dan transaksi berikutnya berada pada tanggal yang sama, simpan batas transaksi/keanggotaan periode yang stabil agar tidak ada transaksi terlewat atau masuk dua laporan. Jangan menebak batas hanya dari judul bulan atau tanggal saldo pindahan.
 
 Urutkan kategori sesuai konfigurasi; rincian di dalam kategori berurutan tanggal lalu nomor transaksi yang stabil. Transaksi bertanggal mundur setelah finalisasi memerlukan alur koreksi yang terlacak, bukan mengubah laporan final secara diam-diam.

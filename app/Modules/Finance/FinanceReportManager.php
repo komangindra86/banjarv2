@@ -39,6 +39,17 @@ final class FinanceReportManager
         }, 3);
     }
 
+    /** Penanda tangan laporan: Petengen yang memfinalkan (atau Petengen aktif pertama) dan Kelian Adat aktif. @return array{treasurer: ?string, kelian: ?string} */
+    public function signers(User $actor): array
+    {
+        $holder = fn (string $role) => DB::table('banjar_user_memberships as m')->where('m.banjar_id', $this->tenant->id())->where('m.status', 'ACTIVE')
+            ->join('tenant_role_assignments as a', fn ($j) => $j->on('a.membership_id', '=', 'm.id')->on('a.banjar_id', '=', 'm.banjar_id'))
+            ->join('roles as r', 'r.id', '=', 'a.role_id')->join('users as u', 'u.id', '=', 'm.user_id')
+            ->where('r.code', $role)->where('u.status', 'ACTIVE')->orderByRaw('u.id = ? desc', [$actor->id])->orderBy('m.id')->value('u.name');
+
+        return ['treasurer' => $holder('PETENGEN'), 'kelian' => $holder('KELIAN')];
+    }
+
     public function row(int $id): object
     {
         $row = $this->query->table('finance_reports')->where('id', $id)->first();
@@ -47,47 +58,48 @@ final class FinanceReportManager
         return $row;
     }
 
+    /**
+     * §26: Petengen cukup memberi nama dan tanggal sangkep; sisanya dihitung sistem dari buku kas.
+     * - Periode mulai: sehari setelah akhir laporan final sebelumnya.
+     * - Periode akhir: tanggal sangkep.
+     * - Saldo pindahan: saldo akhir laporan sebelumnya.
+     * - Laporan pertama: saldo awal Banjar sudah dicatat di buku kas, jadi tidak diisi lagi. Semua yang tercatat pada hari
+     *   pertama buku kas menjadi saldo pindahan (§26.4: saldo awal bukan pendapatan periode berjalan), periode mulai esoknya.
+     */
     public function create(User $actor, array $input): int
     {
         $data = Validator::make($input, [
-            'period_from' => ['required', 'date_format:Y-m-d', 'after_or_equal:2000-01-01'],
-            'period_to' => ['required', 'date_format:Y-m-d', 'after_or_equal:period_from', 'before_or_equal:2100-12-31'],
             'sangkep_title' => ['required', 'string', 'max:200'],
-            'sangkep_date' => ['nullable', 'date_format:Y-m-d'],
-            'previous_report_id' => ['nullable', 'integer'],
-            'opening_balance' => ['nullable', 'regex:/^[0-9]{1,15}$/'],
-            'opening_balance_note' => ['nullable', 'string', 'max:1000'],
-        ])->validate();
+            'sangkep_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:2000-01-01', 'before_or_equal:2100-12-31'],
+        ], [], ['sangkep_title' => 'nama sangkep', 'sangkep_date' => 'tanggal sangkep'])->validate();
 
         return $this->write($actor, function () use ($actor, $data) {
-            $previous = null;
-            if (! empty($data['previous_report_id'])) {
-                $previous = $this->row((int) $data['previous_report_id']);
-                abort_unless($previous->status === 'FINALIZED', 409, 'Laporan sebelumnya harus difinalkan terlebih dahulu.');
-                if ($previous->superseded_by_id) {
-                    $this->fail('Laporan sebelumnya sudah dikoreksi dengan versi baru. Gunakan versi terbaru sebagai rujukan.', 'previous_report_id');
-                }
-                // Batas periode eksplisit: tidak boleh ada celah atau tumpang tindih tanggal antar-laporan berurutan.
-                $expected = Carbon::parse($previous->period_to)->addDay()->toDateString();
-                if ($data['period_from'] !== $expected) {
-                    $this->fail("Tanggal mulai harus {$expected} (sehari setelah akhir laporan sebelumnya) agar transaksi tidak terlewat atau tercatat dua kali.", 'period_from');
-                }
+            if ($draft = $this->query->table('finance_reports')->where('status', 'DRAFT')->first()) {
+                $this->fail('Masih ada draf laporan "'.$draft->sangkep_title.'". Finalkan draf itu dulu sebelum membuat laporan baru.', 'sangkep_title');
             }
-            $source = $previous ? 'PREVIOUS_REPORT' : 'MANUAL';
-            if ($source === 'MANUAL' && empty($data['opening_balance_note'])) {
-                $this->fail('Laporan pertama wajib mencantumkan catatan/bukti saldo awal.', 'opening_balance_note');
+            $previous = $this->query->table('finance_reports')->where('status', 'FINALIZED')->whereNull('superseded_by_id')->orderByDesc('period_to')->first();
+            if ($previous) {
+                $from = Carbon::parse($previous->period_to)->addDay()->toDateString();
+                if ($data['sangkep_date'] < $from) {
+                    $this->fail('Tanggal sangkep harus setelah '.Carbon::parse($previous->period_to)->translatedFormat('d F Y').' (akhir laporan "'.$previous->sangkep_title.'").', 'sangkep_date');
+                }
+                $opening = (int) (json_decode($previous->computed_snapshot, true)['saldo_akhir'] ?? 0);
+            } else {
+                $first = $this->query->table('cash_transactions')->min('transaction_date');
+                $first = $first ? Carbon::parse($first)->toDateString() : null;
+                $from = $first && $first < $data['sangkep_date'] ? Carbon::parse($first)->addDay()->toDateString() : $data['sangkep_date'];
+                $before = $this->query->table('cash_transactions')->where('transaction_date', '<', $from)
+                    ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END), 0) AS balance")->value('balance');
+                $opening = (int) $before;
             }
-            $opening = $source === 'PREVIOUS_REPORT'
-                ? (int) (json_decode($previous->computed_snapshot, true)['saldo_akhir'] ?? 0)
-                : (int) ($data['opening_balance'] ?? 0);
             $id = DB::table('finance_reports')->insertGetId([
-                'banjar_id' => $this->tenant->id(), 'period_from' => $data['period_from'], 'period_to' => $data['period_to'],
-                'sangkep_title' => $data['sangkep_title'], 'sangkep_date' => $data['sangkep_date'] ?? null,
-                'previous_report_id' => $previous?->id, 'opening_balance_source' => $source, 'opening_balance' => $opening,
-                'opening_balance_note' => isset($data['opening_balance_note']) ? Crypt::encryptString($data['opening_balance_note']) : null,
+                'banjar_id' => $this->tenant->id(), 'period_from' => $from, 'period_to' => $data['sangkep_date'],
+                'sangkep_title' => $data['sangkep_title'], 'sangkep_date' => $data['sangkep_date'],
+                'previous_report_id' => $previous?->id, 'opening_balance_source' => $previous ? 'PREVIOUS_REPORT' : 'MANUAL', 'opening_balance' => $opening,
+                'opening_balance_note' => $previous ? null : Crypt::encryptString('Dihitung otomatis dari buku kas (transaksi hari pertama buku kas sebagai saldo awal).'),
                 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
             ]);
-            $this->audit->record($this->tenant->id(), $actor->id, 'finance.report_created', 'finance_reports', $id, [], ['period_from' => $data['period_from'], 'period_to' => $data['period_to']]);
+            $this->audit->record($this->tenant->id(), $actor->id, 'finance.report_created', 'finance_reports', $id, [], ['period_from' => $from, 'period_to' => $data['sangkep_date']]);
 
             return $id;
         });
@@ -186,9 +198,13 @@ final class FinanceReportManager
     public function finalize(User $actor, int $id, array $input): void
     {
         $data = Validator::make($input, [
-            'signer_treasurer_name' => ['required', 'string', 'max:150'],
-            'signer_kelian_name' => ['required', 'string', 'max:150'],
+            'signer_treasurer_name' => ['nullable', 'string', 'max:150'],
+            'signer_kelian_name' => ['nullable', 'string', 'max:150'],
         ])->validate();
+        // Nama penanda tangan diisi sistem dari akun pengurus; boleh diubah bila perlu.
+        $signers = $this->signers($actor);
+        $data['signer_treasurer_name'] = trim((string) ($data['signer_treasurer_name'] ?? '')) ?: $signers['treasurer'];
+        $data['signer_kelian_name'] = trim((string) ($data['signer_kelian_name'] ?? '')) ?: $signers['kelian'];
 
         $this->write($actor, function () use ($actor, $id, $data) {
             $report = $this->row($id);

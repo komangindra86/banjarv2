@@ -65,7 +65,12 @@ class PortalInfoTest extends TestCase
     {
         $this->context();
         $reports = app(FinanceReportManager::class);
-        $id = $reports->create($this->petengen, ['period_from' => $from, 'period_to' => $to, 'sangkep_title' => $title, 'sangkep_date' => $to, 'opening_balance' => '150000', 'opening_balance_note' => 'Saldo awal buku kas']);
+        // Saldo awal Banjar dicatat di buku kas; laporan cukup diberi nama dan tanggal sangkep.
+        if (! DB::table('cash_transactions')->where('banjar_id', $this->tenant)->exists()) {
+            app(\App\Modules\Finance\FinanceManager::class)->cash($this->petengen, ['cash_account_id' => $this->fixture['account'], 'direction' => 'IN', 'amount' => '150000',
+                'transaction_date' => $from, 'reference' => 'SALDO-AWAL', 'reason' => 'Saldo awal buku kas', 'submission_key' => (string) \Illuminate\Support\Str::uuid()]);
+        }
+        $id = $reports->create($this->petengen, ['sangkep_title' => $title, 'sangkep_date' => $to]);
         if ($finalize) {
             $reports->finalize($this->petengen, $id, ['signer_treasurer_name' => 'Petengen QA', 'signer_kelian_name' => 'Kelian QA']);
         }

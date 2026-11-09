@@ -112,9 +112,11 @@ class FinanceReportTest extends TestCase
         $this->cash($this->cashAccount, 'OUT', 15000, '2026-01-25', $expenseOps, 'Konsumsi rapat');
         $this->cash($this->cashAccount, 'OUT', 25000, '2026-01-12', $expenseUpacara, 'Banten piodalan');
 
-        $report = $this->reports->create($this->treasurer, ['period_from' => '2026-01-01', 'period_to' => '2026-01-31',
-            'sangkep_title' => 'SANGKEP UJI LAPORAN', 'sangkep_date' => '2026-01-31',
-            'opening_balance' => '500000', 'opening_balance_note' => 'Saldo awal migrasi buku kas manual sebelum sistem digunakan.']);
+        // Laporan pertama (Desember) mencakup transaksi saldo awal di buku kas; laporan Januari melanjutkan saldonya.
+        $december = $this->reports->create($this->treasurer, ['sangkep_title' => 'SANGKEP DESEMBER', 'sangkep_date' => '2025-12-31']);
+        $this->reports->finalize($this->treasurer, $december, []);
+        $this->context(); // sync queue clears tenant context after the dispatched PDF job runs
+        $report = $this->reports->create($this->treasurer, ['sangkep_title' => 'SANGKEP UJI LAPORAN', 'sangkep_date' => '2026-01-31']);
 
         return compact('incomeRutin', 'incomeLain', 'incomeSewa', 'expenseOps', 'expenseUpacara', 'report');
     }
@@ -189,15 +191,59 @@ class FinanceReportTest extends TestCase
     public function test_chained_report_requires_contiguous_period_and_inherits_opening_balance(): void
     {
         $fixture = $this->buildPeriodFixture();
-        $this->reports->finalize($this->treasurer, $fixture['report'], ['signer_treasurer_name' => 'Made Petengen', 'signer_kelian_name' => 'Wayan Kelian']);
+        // Nama penanda tangan diisi sistem dari akun pengurus.
+        $this->reports->finalize($this->treasurer, $fixture['report'], []);
         $this->context(); // sync queue clears tenant context after the dispatched PDF job runs
+        $this->assertDatabaseHas('finance_reports', ['id' => $fixture['report'], 'signer_treasurer_name' => $this->treasurer->name]);
         try {
-            $this->reports->create($this->treasurer, ['period_from' => '2026-02-05', 'period_to' => '2026-02-28', 'sangkep_title' => 'Sangkep Februari', 'previous_report_id' => $fixture['report']]);
-            $this->fail('Expected a contiguous-period validation failure.');
+            $this->reports->create($this->treasurer, ['sangkep_title' => 'Sangkep mundur', 'sangkep_date' => '2026-01-15']);
+            $this->fail('Tanggal sangkep sebelum akhir laporan sebelumnya harus ditolak.');
         } catch (ValidationException $e) {
-            $this->assertArrayHasKey('period_from', $e->errors());
+            $this->assertArrayHasKey('sangkep_date', $e->errors());
         }
-        $next = $this->reports->create($this->treasurer, ['period_from' => '2026-02-01', 'period_to' => '2026-02-28', 'sangkep_title' => 'Sangkep Februari', 'previous_report_id' => $fixture['report']]);
-        $this->assertDatabaseHas('finance_reports', ['id' => $next, 'opening_balance_source' => 'PREVIOUS_REPORT', 'opening_balance' => 605000]);
+        // Periode mulai, akhir, dan saldo pindahan ditentukan sistem; isian periode/saldo dari luar diabaikan.
+        $next = $this->reports->create($this->treasurer, ['sangkep_title' => 'Sangkep Februari', 'sangkep_date' => '2026-02-28', 'period_from' => '2026-02-10', 'opening_balance' => '1']);
+        $this->assertDatabaseHas('finance_reports', ['id' => $next, 'period_from' => '2026-02-01', 'period_to' => '2026-02-28', 'sangkep_date' => '2026-02-28', 'opening_balance_source' => 'PREVIOUS_REPORT', 'opening_balance' => 605000]);
+        try {
+            $this->reports->create($this->treasurer, ['sangkep_title' => 'Sangkep Maret', 'sangkep_date' => '2026-03-31']);
+            $this->fail('Draf yang belum final harus diselesaikan dulu.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('Masih ada draf', $e->errors()['sangkep_title'][0]);
+        }
+    }
+
+    // Petengen hanya mengisi nama & tanggal sangkep; nama penanda tangan sudah terisi saat finalisasi.
+    public function test_report_forms_ask_only_for_sangkep_name_and_date(): void
+    {
+        $kelian = $this->role('KELIAN');
+        DB::table('users')->where('id', $kelian->id)->update(['name' => 'Wayan Kelian']);
+        $host = 'http://laporan-qa.localhost';
+        $session = fn () => $this->actingAs($this->treasurer)->withSession(['auth_host' => 'laporan-qa.localhost', 'auth_context' => (string) $this->tenant]);
+        $html = $session()->get($host.'/admin/finance/reports/create')->assertOk()->getContent();
+        $this->assertStringContainsString('name="sangkep_title"', $html);
+        $this->assertStringContainsString('name="sangkep_date"', $html);
+        foreach (['period_from', 'period_to', 'opening_balance', 'opening_balance_note'] as $field) {
+            $this->assertStringNotContainsString('name="'.$field.'"', $html);
+        }
+        $session()->post($host.'/admin/finance/reports', ['sangkep_title' => 'Sangkep Purnama', 'sangkep_date' => '2026-03-31'])->assertSessionHasNoErrors();
+        $id = DB::table('finance_reports')->where('sangkep_title', 'Sangkep Purnama')->value('id');
+        $session()->get($host.'/admin/finance/reports/'.$id)->assertOk()->assertSee('Ditandatangani')->assertSee($this->treasurer->name)->assertSee('Wayan Kelian')
+            ->assertSee('SALDO PINDAHAN SANGKEP TGL. 30 Maret 2026');
+        $session()->post($host.'/admin/finance/reports/'.$id.'/finalize', [])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('finance_reports', ['id' => $id, 'status' => 'FINALIZED', 'signer_treasurer_name' => $this->treasurer->name, 'signer_kelian_name' => 'Wayan Kelian']);
+    }
+
+    // Laporan pertama: saldo awal sudah ada di buku kas, jadi tidak diisi lagi; yang tercatat pada hari pertama buku kas
+    // menjadi saldo pindahan, bukan pendapatan periode (§26.4), dan tidak terhitung dua kali.
+    public function test_first_report_takes_opening_balance_from_the_first_cash_book_day(): void
+    {
+        $this->cash($this->cashAccount, 'IN', 1000000, '2026-03-01', null, 'Saldo awal');
+        $this->cash($this->cashAccount, 'OUT', 250000, '2026-03-10', null, 'Banten');
+        $this->cash($this->cashAccount, 'IN', 100000, '2026-03-15', null, 'Iuran');
+        $id = $this->reports->create($this->treasurer, ['sangkep_title' => 'Sangkep pertama', 'sangkep_date' => '2026-03-31']);
+        $report = DB::table('finance_reports')->find($id);
+        $this->assertSame(['2026-03-02', '2026-03-31', 'MANUAL', 1000000], [$report->period_from, $report->period_to, $report->opening_balance_source, (int) $report->opening_balance]);
+        $data = $this->reports->compute($this->reports->row($id));
+        $this->assertSame([1000000, 100000, 250000, 850000], [$data['opening_balance'], $data['total_pemasukan'], $data['total_pengeluaran'], $data['saldo_akhir']]);
     }
 }

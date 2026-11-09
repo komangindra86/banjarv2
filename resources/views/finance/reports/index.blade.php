@@ -6,10 +6,10 @@
 <div class="grid gap-4">@forelse($rows as $row)
 <a class="card" href="/admin/finance/reports/{{ $row->id }}">
 <div class="flex flex-wrap justify-between gap-3"><h2>{{ $row->sangkep_title }}</h2><span class="badge">{{ $row->status === 'FINALIZED' ? 'Final v'.$row->version : 'Draf' }}</span></div>
-<p class="muted mt-2">{{ $row->period_from }} s.d. {{ $row->period_to }}@if($row->superseded_by_id) · digantikan versi baru @endif</p>
+<p class="muted mt-2">@if($row->sangkep_date)Sangkep {{ \Carbon\Carbon::parse($row->sangkep_date)->translatedFormat('d F Y') }} · @endif transaksi {{ \Carbon\Carbon::parse($row->period_from)->translatedFormat('d M Y') }} – {{ \Carbon\Carbon::parse($row->period_to)->translatedFormat('d M Y') }}@if($row->superseded_by_id) · digantikan versi baru @endif</p>
 </a>
 @empty
-<div class="card empty-state"><h2>Belum ada laporan</h2><p class="muted">Buat laporan pertama untuk mulai mencatat sangkep.</p></div>
+<div class="card empty-state"><h2>Belum ada laporan</h2><p class="muted">Tekan "Buat laporan baru", isi nama dan tanggal sangkep. Angkanya diambil otomatis dari buku kas.</p></div>
 @endforelse</div>
 <div class="mt-6">{{ $rows->links() }}</div>
 @endsection

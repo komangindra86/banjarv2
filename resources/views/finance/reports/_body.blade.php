@@ -22,7 +22,7 @@
 <table>
 <thead><tr><th>TGL.</th><th>KETERANGAN</th><th class="num">MASUK</th><th class="num">KELUAR</th><th class="num">SALDO</th></tr></thead>
 <tbody>
-<tr class="opening"><td colspan="2">SALDO PINDAHAN SANGKEP TGL. {{ $report->sangkep_date ? \Carbon\Carbon::parse($report->sangkep_date)->translatedFormat('d F Y') : \Carbon\Carbon::parse($data['period_from'])->translatedFormat('d F Y') }}</td><td class="num"></td><td class="num"></td><td class="num">{{ $money($data['opening_balance']) }}</td></tr>
+<tr class="opening"><td colspan="2">SALDO PINDAHAN SANGKEP TGL. {{ \Carbon\Carbon::parse($data['period_from'])->subDay()->translatedFormat('d F Y') }}</td><td class="num"></td><td class="num"></td><td class="num">{{ $money($data['opening_balance']) }}</td></tr>
 
 <tr class="group-header"><td colspan="5">PENDAPATAN/PEMASUKAN</td></tr>
 @forelse($data['pendapatan'] as $group)
