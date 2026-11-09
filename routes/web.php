@@ -163,6 +163,8 @@ Route::prefix('admin')->middleware('access:tenant')->group(function () {
         Route::get('/reports/{id}', [FinanceController::class, 'reportShow'])->whereNumber('id');
         Route::post('/reports/{id}/finalize', [FinanceController::class, 'finalizeReport'])->whereNumber('id')->middleware('throttle:5,1');
         Route::post('/reports/{id}/revise', [FinanceController::class, 'reviseReport'])->whereNumber('id')->middleware('throttle:5,1');
+        Route::patch('/reports/{id}', [FinanceController::class, 'updateReport'])->whereNumber('id')->middleware('throttle:20,1');
+        Route::post('/reports/{id}/discard', [FinanceController::class, 'discardReport'])->whereNumber('id')->middleware('throttle:10,1');
         Route::get('/reports/{id}/pdf', [FinanceController::class, 'downloadReportPdf'])->whereNumber('id');
     });
     Route::prefix('activities')->middleware(['module:ACTIVITY,ACTIVE', 'module:KRAMA'])->group(function () {

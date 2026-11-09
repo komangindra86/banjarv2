@@ -402,8 +402,10 @@ final class FinanceController extends Controller
         $report = $reports->row($id);
         $data = $reports->compute($report);
         $signers = $reports->signers($request->user());
+        // Draf versi koreksi: periodenya terkunci pada laporan yang dikoreksi (hanya nama yang boleh diubah).
+        $isRevision = $this->query->table('finance_reports')->where('superseded_by_id', $report->id)->exists();
 
-        return view('finance.reports.show', compact('report', 'data', 'signers'));
+        return view('finance.reports.show', compact('report', 'data', 'signers', 'isRevision'));
     }
 
     public function finalizeReport(Request $request, int $id, FinanceReportManager $reports)
@@ -411,6 +413,20 @@ final class FinanceController extends Controller
         $reports->finalize($request->user(), $id, $request->all());
 
         return redirect('/admin/finance/reports/'.$id)->with('success', 'Laporan difinalkan. PDF sedang disiapkan dan akan tersedia sesaat lagi.');
+    }
+
+    public function updateReport(Request $request, int $id, FinanceReportManager $reports)
+    {
+        $reports->updateDraft($request->user(), $id, $request->all());
+
+        return redirect('/admin/finance/reports/'.$id)->with('success', 'Draf laporan diperbarui.');
+    }
+
+    public function discardReport(Request $request, int $id, FinanceReportManager $reports)
+    {
+        $title = $reports->discard($request->user(), $id);
+
+        return redirect('/admin/finance/reports')->with('success', 'Draf laporan "'.$title.'" dibatalkan. Buku kas tidak berubah.');
     }
 
     public function reviseReport(Request $request, int $id, FinanceReportManager $reports)

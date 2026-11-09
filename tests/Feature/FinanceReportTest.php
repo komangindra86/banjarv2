@@ -233,6 +233,53 @@ class FinanceReportTest extends TestCase
         $this->assertDatabaseHas('finance_reports', ['id' => $id, 'status' => 'FINALIZED', 'signer_treasurer_name' => $this->treasurer->name, 'signer_kelian_name' => 'Wayan Kelian']);
     }
 
+    // Sebelum final, draf boleh diperbaiki (nama/tanggal sangkep) atau dibatalkan; buku kas tidak berubah.
+    public function test_draft_can_be_edited_or_discarded_before_finalization(): void
+    {
+        $this->cash($this->cashAccount, 'IN', 400000, '2026-03-01', null, 'Saldo awal');
+        $this->cash($this->cashAccount, 'IN', 50000, '2026-03-20', null, 'Iuran');
+        $id = $this->reports->create($this->treasurer, ['sangkep_title' => 'Sangkep slah ketik', 'sangkep_date' => '2026-03-10']);
+        $this->reports->updateDraft($this->treasurer, $id, ['sangkep_title' => 'Sangkep Purnama', 'sangkep_date' => '2026-03-31']);
+        $this->assertDatabaseHas('finance_reports', ['id' => $id, 'sangkep_title' => 'Sangkep Purnama', 'sangkep_date' => '2026-03-31', 'period_from' => '2026-03-02', 'period_to' => '2026-03-31', 'opening_balance' => 400000]);
+        $this->assertSame(450000, $this->reports->compute($this->reports->row($id))['saldo_akhir']);
+
+        $title = $this->reports->discard($this->treasurer, $id);
+        $this->assertSame('Sangkep Purnama', $title);
+        $this->assertDatabaseMissing('finance_reports', ['id' => $id]);
+        $this->assertSame(2, DB::table('cash_transactions')->where('banjar_id', $this->tenant)->count(), 'Buku kas tidak ikut terhapus.');
+        $this->assertDatabaseHas('audit_logs', ['banjar_id' => $this->tenant, 'action' => 'finance.report_discarded', 'entity_id' => $id]);
+
+        // Setelah dibatalkan, laporan baru bisa dibuat; laporan final tidak bisa diubah atau dibatalkan.
+        $final = $this->reports->create($this->treasurer, ['sangkep_title' => 'Sangkep Maret', 'sangkep_date' => '2026-03-31']);
+        $this->reports->finalize($this->treasurer, $final, []);
+        $this->context();
+        foreach ([fn () => $this->reports->updateDraft($this->treasurer, $final, ['sangkep_title' => 'X', 'sangkep_date' => '2026-03-31']), fn () => $this->reports->discard($this->treasurer, $final)] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Laporan final tidak boleh diubah atau dibatalkan.');
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+                $this->assertSame(409, $e->getStatusCode());
+            }
+        }
+
+        // Draf koreksi: hanya nama yang bisa diubah; dibatalkan, versi final lama berlaku lagi.
+        $revision = $this->reports->revise($this->treasurer, $final, ['reason' => 'Salah nama sangkep']);
+        $this->reports->updateDraft($this->treasurer, $revision, ['sangkep_title' => 'Sangkep Maret (koreksi)', 'sangkep_date' => '2026-04-30']);
+        $this->assertDatabaseHas('finance_reports', ['id' => $revision, 'sangkep_title' => 'Sangkep Maret (koreksi)', 'period_to' => '2026-03-31']);
+        $this->reports->discard($this->treasurer, $revision);
+        $this->assertDatabaseHas('finance_reports', ['id' => $final, 'status' => 'FINALIZED', 'superseded_by_id' => null]);
+        $next = $this->reports->create($this->treasurer, ['sangkep_title' => 'Sangkep April', 'sangkep_date' => '2026-04-30']);
+        $this->assertDatabaseHas('finance_reports', ['id' => $next, 'previous_report_id' => $final, 'period_from' => '2026-04-01']);
+
+        // Tombolnya tersedia di halaman draf.
+        $host = 'http://laporan-qa.localhost';
+        $this->actingAs($this->treasurer)->withSession(['auth_host' => 'laporan-qa.localhost', 'auth_context' => (string) $this->tenant])
+            ->get($host.'/admin/finance/reports/'.$next)->assertOk()->assertSee('Batalkan draf laporan')->assertSee('Ubah nama atau tanggal sangkep');
+        $this->actingAs($this->treasurer)->withSession(['auth_host' => 'laporan-qa.localhost', 'auth_context' => (string) $this->tenant])
+            ->post($host.'/admin/finance/reports/'.$next.'/discard')->assertRedirect('/admin/finance/reports');
+        $this->assertDatabaseMissing('finance_reports', ['id' => $next]);
+    }
+
     // Laporan pertama: saldo awal sudah ada di buku kas, jadi tidak diisi lagi; yang tercatat pada hari pertama buku kas
     // menjadi saldo pindahan, bukan pendapatan periode (§26.4), dan tidak terhitung dua kali.
     public function test_first_report_takes_opening_balance_from_the_first_cash_book_day(): void

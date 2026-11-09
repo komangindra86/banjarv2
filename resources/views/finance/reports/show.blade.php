@@ -19,7 +19,21 @@
 <x-editor-field name="signer_kelian_name" label="Nama Kelian Adat (mengetahui)" :value="$signers['kelian']" />
 </div></details>
 <button class="button">Finalkan laporan</button>
-</form></section>
+</form>
+<div class="mt-6 pt-4 border-t">
+<details @if($errors->hasAny(['sangkep_title', 'sangkep_date'])) open @endif><summary class="cursor-pointer py-2 font-semibold">Ada yang salah? Ubah {{ $isRevision ? 'nama sangkep' : 'nama atau tanggal sangkep' }}</summary>
+<form class="form-stack mt-2" method="post" action="/admin/finance/reports/{{ $report->id }}">@csrf @method('PATCH')
+<x-editor-field name="sangkep_title" label="Nama sangkep" :value="$report->sangkep_title" required />
+@if($isRevision)<input type="hidden" name="sangkep_date" value="{{ $report->sangkep_date ?? $report->period_to }}"><p class="help">Ini versi koreksi: tanggal dan periode mengikuti laporan yang dikoreksi.</p>
+@else<x-editor-field name="sangkep_date" label="Tanggal sangkep" type="date" :value="$report->sangkep_date ?? $report->period_to" required help="Periode dan saldo pindahan akan dihitung ulang." />
+@endif
+<button class="button-secondary">Simpan perubahan</button>
+</form></details>
+<form method="post" action="/admin/finance/reports/{{ $report->id }}/discard" class="mt-3" data-confirm="{{ $isRevision ? 'Batalkan koreksi ini? Versi final sebelumnya tetap berlaku.' : 'Batalkan draf laporan ini? Drafnya dihapus; buku kas tidak berubah.' }}">@csrf
+<button class="button-quiet">{{ $isRevision ? 'Batalkan koreksi' : 'Batalkan draf laporan' }}</button>
+</form>
+</div>
+</section>
 @endif
 @if($report->status === 'FINALIZED' && ! $report->superseded_by_id && $canCash)
 <details class="card form-width mb-6"><summary class="cursor-pointer py-3 font-semibold">Buat versi koreksi</summary>

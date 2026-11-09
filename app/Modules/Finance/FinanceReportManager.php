@@ -68,30 +68,14 @@ final class FinanceReportManager
      */
     public function create(User $actor, array $input): int
     {
-        $data = Validator::make($input, [
-            'sangkep_title' => ['required', 'string', 'max:200'],
-            'sangkep_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:2000-01-01', 'before_or_equal:2100-12-31'],
-        ], [], ['sangkep_title' => 'nama sangkep', 'sangkep_date' => 'tanggal sangkep'])->validate();
+        $data = $this->sangkepInput($input);
 
         return $this->write($actor, function () use ($actor, $data) {
             if ($draft = $this->query->table('finance_reports')->where('status', 'DRAFT')->first()) {
-                $this->fail('Masih ada draf laporan "'.$draft->sangkep_title.'". Finalkan draf itu dulu sebelum membuat laporan baru.', 'sangkep_title');
+                $this->fail('Masih ada draf laporan "'.$draft->sangkep_title.'". Finalkan atau batalkan draf itu dulu sebelum membuat laporan baru.', 'sangkep_title');
             }
             $previous = $this->query->table('finance_reports')->where('status', 'FINALIZED')->whereNull('superseded_by_id')->orderByDesc('period_to')->first();
-            if ($previous) {
-                $from = Carbon::parse($previous->period_to)->addDay()->toDateString();
-                if ($data['sangkep_date'] < $from) {
-                    $this->fail('Tanggal sangkep harus setelah '.Carbon::parse($previous->period_to)->translatedFormat('d F Y').' (akhir laporan "'.$previous->sangkep_title.'").', 'sangkep_date');
-                }
-                $opening = (int) (json_decode($previous->computed_snapshot, true)['saldo_akhir'] ?? 0);
-            } else {
-                $first = $this->query->table('cash_transactions')->min('transaction_date');
-                $first = $first ? Carbon::parse($first)->toDateString() : null;
-                $from = $first && $first < $data['sangkep_date'] ? Carbon::parse($first)->addDay()->toDateString() : $data['sangkep_date'];
-                $before = $this->query->table('cash_transactions')->where('transaction_date', '<', $from)
-                    ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END), 0) AS balance")->value('balance');
-                $opening = (int) $before;
-            }
+            [$from, $opening] = $this->period($previous, $data['sangkep_date']);
             $id = DB::table('finance_reports')->insertGetId([
                 'banjar_id' => $this->tenant->id(), 'period_from' => $from, 'period_to' => $data['sangkep_date'],
                 'sangkep_title' => $data['sangkep_title'], 'sangkep_date' => $data['sangkep_date'],
@@ -103,6 +87,69 @@ final class FinanceReportManager
 
             return $id;
         });
+    }
+
+    // Draf boleh diperbaiki sebelum finalisasi: nama & tanggal sangkep (periode dan saldo pindahan dihitung ulang).
+    // Draf versi koreksi hanya boleh ganti nama; periodenya harus sama dengan laporan yang dikoreksi.
+    public function updateDraft(User $actor, int $id, array $input): void
+    {
+        $this->write($actor, function () use ($actor, $id, $input) {
+            $report = $this->row($id);
+            abort_unless($report->status === 'DRAFT', 409, 'Laporan yang sudah final tidak dapat diubah; buat versi koreksi.');
+            $revision = $this->query->table('finance_reports')->where('superseded_by_id', $id)->exists();
+            $data = $this->sangkepInput($revision ? $input + ['sangkep_date' => $report->sangkep_date ?? $report->period_to] : $input);
+            $changes = ['sangkep_title' => $data['sangkep_title']];
+            if (! $revision) {
+                $previous = $report->previous_report_id ? $this->row((int) $report->previous_report_id) : null;
+                [$from, $opening] = $this->period($previous, $data['sangkep_date']);
+                $changes += ['sangkep_date' => $data['sangkep_date'], 'period_from' => $from, 'period_to' => $data['sangkep_date'], 'opening_balance' => $opening];
+            }
+            $this->query->table('finance_reports')->where('id', $id)->update($changes + ['updated_at' => now()]);
+            $this->audit->record($this->tenant->id(), $actor->id, 'finance.report_updated', 'finance_reports', $id,
+                ['period_from' => $report->period_from, 'period_to' => $report->period_to], ['period_from' => $changes['period_from'] ?? $report->period_from, 'period_to' => $changes['period_to'] ?? $report->period_to]);
+        });
+    }
+
+    // Membatalkan draf: drafnya dihapus, buku kas tidak berubah. Draf koreksi yang dibatalkan memulihkan versi final lama.
+    public function discard(User $actor, int $id): string
+    {
+        return $this->write($actor, function () use ($actor, $id) {
+            $report = $this->row($id);
+            abort_unless($report->status === 'DRAFT', 409, 'Laporan yang sudah final tidak dapat dibatalkan; buat versi koreksi.');
+            $this->query->table('finance_reports')->where('superseded_by_id', $id)->update(['superseded_by_id' => null, 'updated_at' => now()]);
+            $this->query->table('finance_reports')->where('id', $id)->delete();
+            $this->audit->record($this->tenant->id(), $actor->id, 'finance.report_discarded', 'finance_reports', $id, ['status' => 'DRAFT', 'period_from' => $report->period_from, 'period_to' => $report->period_to], []);
+
+            return $report->sangkep_title;
+        });
+    }
+
+    private function sangkepInput(array $input): array
+    {
+        return Validator::make($input, [
+            'sangkep_title' => ['required', 'string', 'max:200'],
+            'sangkep_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:2000-01-01', 'before_or_equal:2100-12-31'],
+        ], [], ['sangkep_title' => 'nama sangkep', 'sangkep_date' => 'tanggal sangkep'])->validate();
+    }
+
+    /** Periode mulai & saldo pindahan untuk tanggal sangkep tertentu (lihat create()). @return array{0: string, 1: int} */
+    private function period(?object $previous, string $sangkepDate): array
+    {
+        if ($previous) {
+            $from = Carbon::parse($previous->period_to)->addDay()->toDateString();
+            if ($sangkepDate < $from) {
+                $this->fail('Tanggal sangkep harus setelah '.Carbon::parse($previous->period_to)->translatedFormat('d F Y').' (akhir laporan "'.$previous->sangkep_title.'").', 'sangkep_date');
+            }
+
+            return [$from, (int) (json_decode($previous->computed_snapshot, true)['saldo_akhir'] ?? 0)];
+        }
+        $first = $this->query->table('cash_transactions')->min('transaction_date');
+        $first = $first ? Carbon::parse($first)->toDateString() : null;
+        $from = $first && $first < $sangkepDate ? Carbon::parse($first)->addDay()->toDateString() : $sangkepDate;
+        $before = $this->query->table('cash_transactions')->where('transaction_date', '<', $from)
+            ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END), 0) AS balance")->value('balance');
+
+        return [$from, (int) $before];
     }
 
     public function compute(object $report): array

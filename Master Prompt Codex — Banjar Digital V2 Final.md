@@ -987,7 +987,7 @@ Petengen cukup mengisi **nama sangkep** dan **tanggal sangkep**; sistem menentuk
 - periode mulai = sehari setelah akhir laporan final sebelumnya; periode akhir = tanggal sangkep;
 - saldo pindahan = saldo akhir laporan sebelumnya;
 - laporan pertama: saldo awal Banjar sudah dicatat di buku kas (tidak diisi dua kali) — semua yang tercatat pada hari pertama buku kas menjadi saldo pindahan, periode mulai keesokan harinya;
-- selama masih ada draf laporan, laporan baru tidak dapat dibuat;
+- selama masih ada draf laporan, laporan baru tidak dapat dibuat; sebelum final, draf dapat diubah nama/tanggal sangkepnya (periode dan saldo pindahan dihitung ulang) atau dibatalkan (draf dihapus, buku kas tidak berubah). Draf versi koreksi hanya dapat diganti namanya; membatalkannya memulihkan versi final sebelumnya;
 - nama penanda tangan diisi otomatis dari akun Petengen (yang memfinalkan) dan Kelian Adat aktif, dapat diubah sebelum finalisasi.
 
 Definisikan batas penutupan secara eksplisit. Jika laporan sebelumnya dan transaksi berikutnya berada pada tanggal yang sama, simpan batas transaksi/keanggotaan periode yang stabil agar tidak ada transaksi terlewat atau masuk dua laporan. Jangan menebak batas hanya dari judul bulan atau tanggal saldo pindahan.
