@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnableRequestMemo;
 use App\Http\Middleware\PrivateResponse;
 use App\Http\Middleware\RequireAccess;
 use App\Http\Middleware\RequireModule;
@@ -16,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->prepend(EnableRequestMemo::class);
         $middleware->append(PrivateResponse::class);
         $middleware->web(prepend: [ResolveBanjar::class], append: [ResolvePortalBanjar::class]);
         $middleware->validateCsrfTokens(except: ['webhooks/midtrans']);

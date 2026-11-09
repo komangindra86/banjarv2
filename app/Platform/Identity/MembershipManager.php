@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use App\Platform\Support\RequestMemo;
 
 final class MembershipManager
 {
@@ -29,6 +30,7 @@ final class MembershipManager
             $membership = DB::table('banjar_user_memberships')->insertGetId(['banjar_id' => $banjarId, 'user_id' => $user->id, 'status' => 'ACTIVE', 'created_at' => now(), 'updated_at' => now()]);
             DB::table('tenant_role_assignments')->insert(['banjar_id' => $banjarId, 'membership_id' => $membership, 'role_id' => $data['role_id']] + $scope);
             $this->audit->record($banjarId, $actor->id, 'membership.created', 'membership', $membership, [], ['user_id' => $user->id, 'role_id' => $data['role_id'], 'status' => 'ACTIVE'] + $scope);
+            RequestMemo::flush();
         });
     }
 
@@ -53,6 +55,7 @@ final class MembershipManager
                 throw ValidationException::withMessages(['status' => 'Sisakan minimal satu Admin Banjar aktif.']);
             }
             $this->audit->record($banjarId, $actor->id, 'membership.updated', 'membership', $membershipId, ['status' => $member->status, 'role_id' => $oldRole] + (array) $assignment, $data + $scope);
+            RequestMemo::flush();
         });
     }
 

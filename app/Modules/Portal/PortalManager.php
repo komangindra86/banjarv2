@@ -4,6 +4,7 @@ namespace App\Modules\Portal;
 
 use App\Models\User;
 use App\Platform\Audit\Audit;
+use App\Platform\Support\RequestMemo;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -15,14 +16,15 @@ final class PortalManager
     public function __construct(private Audit $audit) {}
 
     // Banjar yang boleh dibuka akun ini: keanggotaan aktif, peran dengan krama.self, modul KRAMA & PORTAL aktif.
+    // Dibaca sekali per request: middleware portal memeriksa Banjar aktif, menu memeriksa perlu "Ganti banjar".
     public function banjars(User $user): Collection
     {
-        return $this->eligible($user)->orderBy('b.name')->get();
+        return RequestMemo::remember('portal-banjars:'.$user->id, fn () => $this->eligible($user)->orderBy('b.name')->get());
     }
 
     public function banjar(User $user, int $id): ?object
     {
-        return $this->eligible($user)->where('b.id', $id)->first();
+        return $this->banjars($user)->first(fn ($banjar) => (int) $banjar->id === $id);
     }
 
     // Mengikat sesi portal ke satu Banjar; mengembalikan halaman tujuan setelah masuk.

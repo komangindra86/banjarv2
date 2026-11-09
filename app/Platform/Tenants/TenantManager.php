@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use App\Platform\Support\RequestMemo;
 
 final class TenantManager
 {
@@ -68,6 +69,7 @@ final class TenantManager
             }
             DB::table('banjars')->where('id', $id)->update($data + ['updated_at' => now()]);
             $this->audit->record($id, $actor->id, 'tenant.status_changed', 'banjar', $id, ['status' => $banjar->status], $data);
+            RequestMemo::flush();
         });
     }
 
@@ -92,6 +94,7 @@ final class TenantManager
                 }
             }
             DB::table('banjar_modules')->where('banjar_id', $id)->where('code', $code)->update($data + ['updated_at' => now()]);
+            RequestMemo::flush();
             $this->audit->record($id, $actor->id, 'module.changed', 'module', $code, ['status' => $old], $data + ['code' => $code]);
         });
     }

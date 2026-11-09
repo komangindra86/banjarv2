@@ -215,8 +215,40 @@ class CentralPortalTest extends TestCase
 
         // Peramban mengambil ikon tanpa cookie; ikon hanya untuk Banjar yang Portal Krama-nya aktif.
         $this->post($this->portal.'/logout');
-        $this->get($this->portal.'/brand/'.$this->tenant.'/icon-192.png')->assertOk()->assertHeader('Content-Type', 'image/png');
+        // Ikon berversi (?v=logo) boleh disimpan browser: tidak diunduh ulang setiap pindah menu.
+        $this->get($this->portal.'/brand/'.$this->tenant.'/icon-192.png')->assertOk()->assertHeader('Content-Type', 'image/png')->assertHeader('Cache-Control', 'max-age=604800, public');
         $this->module($this->tenant, 'PORTAL', 'INACTIVE');
         $this->get($this->portal.'/brand/'.$this->tenant.'/icon-192.png')->assertNotFound();
+    }
+
+    // Menu bawah portal harus ringan: izin, modul, dan daftar Banjar dibaca sekali per halaman, bukan per menu.
+    public function test_portal_menu_pages_read_access_once_per_request(): void
+    {
+        foreach (['ACTIVITY', 'ADMINISTRATION', 'NOTIFICATION'] as $code) {
+            $this->module($this->tenant, $code);
+        }
+        $this->login();
+        $queries = [];
+        DB::listen(function ($query) use (&$queries) {
+            $queries[] = $query->sql;
+        });
+        foreach (['/portal/beranda', '/notifications', '/portal', '/aktivitas', '/admin/krama/mine'] as $path) {
+            $queries = [];
+            $this->get($this->portal.$path)->assertOk()->assertHeader('Cache-Control', 'max-age=0, no-store, private');
+            $repeated = array_keys(array_filter(array_count_values($queries), fn ($n) => $n > 1));
+            $this->assertSame([], $repeated, $path.' menjalankan query yang sama lebih dari sekali.');
+            $this->assertLessThanOrEqual(14, count($queries), $path.' menjalankan '.count($queries).' query.');
+        }
+    }
+
+    public function test_access_changes_within_one_request_are_not_stale(): void
+    {
+        $this->module($this->tenant, 'ACTIVITY', 'INACTIVE');
+        app(CurrentBanjar::class)->set(DB::table('banjars')->find($this->tenant));
+        $gate = app(\App\Platform\Modules\ModuleGate::class);
+        $this->assertFalse($gate->allows('ACTIVITY', 'ACTIVE'));
+        app(TenantManager::class)->module($this->super, $this->tenant, 'ACTIVITY', ['status' => 'ACTIVE']);
+        $this->assertTrue($gate->allows('ACTIVITY', 'ACTIVE'), 'Status modul harus segar setelah diubah dalam request yang sama.');
+        app(CurrentBanjar::class)->clear();
     }
 }

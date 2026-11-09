@@ -117,10 +117,11 @@ final class PublicWebsiteController extends Controller
         abort_unless($file && $this->public->mediaVisible($id) && Storage::disk('local')->exists($file->path), 404);
         $name = 'berkas-'.$id.'.'.pathinfo($file->path, PATHINFO_EXTENSION);
         if ($file->mime === 'application/pdf') {
-            return Storage::disk('local')->download($file->path, $name, ['Content-Type' => $file->mime, 'Content-Security-Policy' => "sandbox; default-src 'none'"]);
+            return Storage::disk('local')->download($file->path, $name, ['Content-Type' => $file->mime, 'Content-Security-Policy' => "sandbox; default-src 'none'", 'Cache-Control' => 'public, max-age=3600']);
         }
 
-        return response()->file(Storage::disk('local')->path($file->path), ['Content-Type' => $file->mime]);
+        // Berkas publik dengan id tetap: browser menyimpannya satu jam (logo di bilah atas tidak diunduh ulang tiap halaman).
+        return response()->file(Storage::disk('local')->path($file->path), ['Content-Type' => $file->mime, 'Cache-Control' => 'public, max-age=3600']);
     }
 
     // Peta situs untuk Google: setiap tulisan terbit beserta tanggal terakhir diubah dan foto utamanya.

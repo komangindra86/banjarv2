@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use App\Platform\Support\RequestMemo;
 
 // §23/§53: akun portal warga. Admin Banjar cukup klik "Aktifkan akun warga"; warga login dengan NIK dan
 // kata sandi awal DEFAULT_PASSWORD, lalu wajib menggantinya saat pertama masuk.
@@ -79,6 +80,7 @@ final class AccountManager
                 $membershipId = DB::table('banjar_user_memberships')->insertGetId(['banjar_id' => $this->tenant->id(), 'user_id' => $user->id, 'status' => 'ACTIVE', 'created_at' => now(), 'updated_at' => now()]);
             }
             DB::table('tenant_role_assignments')->insertOrIgnore(['banjar_id' => $this->tenant->id(), 'membership_id' => $membershipId, 'role_id' => DB::table('roles')->where('code', 'KRAMA')->value('id'), 'scope_type' => 'BANJAR']);
+            RequestMemo::flush();
             $this->query->table('krama')->where('id', $kramaId)->update(['user_id' => $user->id, 'version' => $krama->version + 1, 'updated_at' => now()]);
             $this->audit->record($this->tenant->id(), $actor->id, 'krama.account_activated', 'krama', $kramaId, ['user_id' => null], ['user_id' => $user->id, 'new_account' => $created]);
         });
