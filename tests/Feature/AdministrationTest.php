@@ -177,6 +177,20 @@ class AdministrationTest extends TestCase
         }
     }
 
+    // Warga pemohon diberi tahu saat suratnya terbit atau ditolak, dengan tautan ke surat di portal.
+    public function test_requester_is_notified_when_letter_is_issued_or_rejected(): void
+    {
+        DB::table('banjar_modules')->where('banjar_id', $this->a)->where('code', 'NOTIFICATION')->update(['status' => 'ACTIVE']);
+        $this->policy(false);
+        $issued = $this->submit();
+        app(LetterManager::class)->review($this->secretary, $issued, ['action' => 'verify']);
+        $rejected = $this->submit();
+        app(LetterManager::class)->review($this->secretary, $rejected, ['action' => 'reject', 'review_note' => 'Data belum lengkap']);
+        $this->assertDatabaseHas('notifications', ['banjar_id' => $this->a, 'user_id' => $this->self->id, 'type' => 'letter.issued', 'url' => '/portal/surat/'.$issued]);
+        $this->assertDatabaseHas('notifications', ['banjar_id' => $this->a, 'user_id' => $this->self->id, 'type' => 'letter.rejected', 'url' => '/portal/surat/'.$rejected]);
+        $this->assertDatabaseMissing('notifications', ['user_id' => $this->secretary->id, 'type' => 'letter.issued']);
+    }
+
     public function test_policy_snapshot_and_no_approval_workflow(): void
     {
         $this->policy(false);

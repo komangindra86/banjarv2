@@ -241,6 +241,56 @@ class CentralPortalTest extends TestCase
         }
     }
 
+    // Pengumuman yang diterbitkan pengurus sampai ke warga di portal; kegiatan yang sedang berlangsung hari ini tetap tampil.
+    public function test_portal_shows_current_announcements_and_todays_activity(): void
+    {
+        $this->module($this->tenant, 'ACTIVITY');
+        $other = $this->otherBanjar('lain', 'Banjar Lain');
+        $news = fn (array $data, ?int $tenant = null) => DB::table('announcements')->insertGetId($data + ['banjar_id' => $tenant ?? $this->tenant, 'body' => "Baris satu\nbaris dua", 'status' => 'PUBLISHED', 'priority' => 'NORMAL', 'published_at' => now()->subHour(), 'created_at' => now(), 'updated_at' => now()]);
+        $news(['title' => 'Ngayah gotong royong', 'slug' => 'ngayah']);
+        $news(['title' => 'Berita duka', 'slug' => 'duka', 'priority' => 'IMPORTANT', 'published_at' => now()->subDays(2)]);
+        $news(['title' => 'Sudah lewat', 'slug' => 'lewat', 'expires_at' => now()->subMinute()]);
+        $news(['title' => 'Masih draf', 'slug' => 'draf', 'status' => 'DRAFT']);
+        $news(['title' => 'Milik Banjar lain', 'slug' => 'lain'], $other);
+        $activity = fn (string $title, $starts, $ends = null) => DB::table('activities')->insert(['banjar_id' => $this->tenant, 'title' => $title, 'slug' => \Illuminate\Support\Str::slug($title), 'status' => 'PUBLISHED', 'visibility' => 'PUBLIC', 'published_at' => now()->subHour(), 'starts_at' => $starts, 'ends_at' => $ends, 'created_at' => now(), 'updated_at' => now()]);
+        $activity('Kegiatan kemarin', now('Asia/Makassar')->subDay()->startOfDay()->addHours(9)->utc());
+        $activity('Sedang berlangsung', now()->subMinutes(5));
+
+        $this->login();
+        $home = $this->get($this->portal.'/portal/beranda')->assertOk()
+            ->assertSeeInOrder(['PENGUMUMAN', 'Berita duka', 'Penting', 'Ngayah gotong royong'])
+            ->assertSee('href="/portal/pengumuman/ngayah"', false)->assertSee('Sedang berlangsung')
+            ->assertDontSee('Sudah lewat')->assertDontSee('Masih draf')->assertDontSee('Milik Banjar lain')->assertDontSee('Kegiatan kemarin');
+        $this->get($this->portal.'/portal/pengumuman')->assertOk()->assertSee('Ngayah gotong royong')->assertSee('Berita duka')->assertDontSee('Milik Banjar lain');
+        $this->get($this->portal.'/portal/pengumuman/ngayah')->assertOk()->assertSee('Ngayah gotong royong')->assertSee("Baris satu\nbaris dua")
+            ->tap(function ($response) {
+                // Halaman pengumuman termasuk Beranda di menu bawah, bukan "Surat saya".
+                $this->assertMatchesRegularExpression('#href="/portal/beranda"\s+aria-current="page"#', $response->getContent());
+                $this->assertDoesNotMatchRegularExpression('#href="/portal"\s+aria-current="page"#', $response->getContent());
+            });
+        $this->get($this->portal.'/portal/pengumuman/lewat')->assertOk()->assertSee('Masa berlaku pengumuman ini telah berakhir');
+        foreach (['draf', 'lain', 'tidak-ada'] as $slug) {
+            $this->get($this->portal.'/portal/pengumuman/'.$slug)->assertNotFound();
+        }
+        // Pengumuman mengikuti modul Website: dimatikan, bagian dan halamannya hilang.
+        $this->module($this->tenant, 'WEBSITE', 'INACTIVE');
+        $this->get($this->portal.'/portal/beranda')->assertOk()->assertDontSee('Ngayah gotong royong');
+        $this->get($this->portal.'/portal/pengumuman')->assertForbidden();
+    }
+
+    // Ajakan mengaktifkan push tampil di beranda portal hanya bila push dikonfigurasi dan modul Notifikasi aktif.
+    public function test_portal_home_offers_push_only_when_configured(): void
+    {
+        $this->module($this->tenant, 'NOTIFICATION');
+        $this->login();
+        config(['webpush.enabled' => false]);
+        $this->get($this->portal.'/portal/beranda')->assertOk()->assertDontSee('Dapatkan pemberitahuan di HP');
+        config(['webpush.enabled' => true, 'webpush.public_key' => 'kunci-publik-uji']);
+        $this->get($this->portal.'/portal/beranda')->assertOk()->assertSee('Dapatkan pemberitahuan di HP')->assertSee('data-vapid-key="kunci-publik-uji"', false);
+        $this->module($this->tenant, 'NOTIFICATION', 'INACTIVE');
+        $this->get($this->portal.'/portal/beranda')->assertOk()->assertDontSee('Dapatkan pemberitahuan di HP');
+    }
+
     public function test_access_changes_within_one_request_are_not_stale(): void
     {
         $this->module($this->tenant, 'ACTIVITY', 'INACTIVE');

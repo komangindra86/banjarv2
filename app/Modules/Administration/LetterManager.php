@@ -141,6 +141,9 @@ final class LetterManager
             $this->step($id, $actor, $status, $data['review_note'] ?? null);
             if ($status === 'ISSUED') {
                 $this->issue($row, $actor, $person, $household);
+                $this->notifications->notify($this->tenant->id(), (int) $row->requester_id, 'letter.issued', 'Surat sudah terbit', 'Surat yang Anda ajukan sudah terbit dan dapat diunduh.', '/portal/surat/'.$id);
+            } elseif ($status === 'REJECTED') {
+                $this->notifications->notify($this->tenant->id(), (int) $row->requester_id, 'letter.rejected', 'Pengajuan surat ditolak', 'Buka untuk melihat alasan dari pengurus.', '/portal/surat/'.$id);
             } elseif ($status === 'VERIFIED') {
                 $this->notifications->notifyPermission($this->tenant->id(), 'letter.approve', 'letter.approval_pending', 'Surat menunggu persetujuan', 'Ada surat yang menunggu persetujuan Kelian.', '/admin/letters');
             }

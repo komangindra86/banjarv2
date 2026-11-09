@@ -2,6 +2,7 @@
 
 namespace App\Modules\Website;
 
+use App\Modules\Notification\NotifyWarga;
 use App\Models\User;
 use App\Platform\Audit\Audit;
 use App\Platform\Identity\Access;
@@ -118,6 +119,10 @@ final class ContentManager
             }
             $this->syncPhotos($type, $id, $photos);
             $this->audit->record($this->tenant->id(), $actor->id, $old ? 'content.updated' : 'content.created', $definition['table'], $id, (array) $old, $data + ['photos' => $photos]);
+            // Pengumuman/kegiatan yang langsung terbit diberitahukan ke warga lewat antrean; yang terjadwal oleh scheduler.
+            if (in_array($type, ['pengumuman', 'agenda'], true) && $data['status'] === 'PUBLISHED') {
+                NotifyWarga::dispatch('content', $this->tenant->id())->afterCommit();
+            }
 
             return $id;
         });

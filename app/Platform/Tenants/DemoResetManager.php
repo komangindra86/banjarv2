@@ -86,6 +86,11 @@ final class DemoResetManager
                     DB::table('sessions')->where('user_id', $userId)->delete();
                     $removed += DB::table('users')->where('id', $userId)->delete();
                 }
+                // Konten awal demo dianggap sudah diumumkan: reset malam tidak boleh mengirim ulang notifikasi ke warga demo.
+                foreach (['announcements', 'activities'] as $table) {
+                    DB::table($table)->where('banjar_id', $banjarId)->where('status', 'PUBLISHED')->where('published_at', '<=', now())
+                        ->whereNull('notified_at')->update(['notified_at' => now()]);
+                }
             } finally {
                 DB::statement('SET FOREIGN_KEY_CHECKS=1');
             }

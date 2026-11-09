@@ -394,6 +394,9 @@ if (pushToggle && 'serviceWorker' in navigator && window.isSecureContext && 'Pus
         const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.getSubscription();
         pushToggle.hidden = false;
+        // Kartu ajakan di beranda portal hanya tampil selama push belum aktif di perangkat ini.
+        const card = pushToggle.closest('[data-push-card]');
+        if (card?.hasAttribute('data-hide-when-active')) card.hidden = Boolean(subscription);
         if (subscription) {
             status.textContent = 'Notifikasi push aktif di perangkat ini.';
             pushToggle.textContent = 'Nonaktifkan notifikasi push';

@@ -53,7 +53,7 @@ final class PublicWebsiteController extends Controller
 
         return $this->page('public.home', [
             'announcements' => $this->public->published('pengumuman')->orderByRaw("priority = 'IMPORTANT' desc")->orderByDesc('published_at')->limit(3)->get(),
-            'activities' => $this->public->published('agenda')->where('starts_at', '>=', now())->orderBy('starts_at')->limit(3)->get(),
+            'activities' => $this->public->published('agenda')->tap(fn ($q) => \App\Modules\Activity\ActivitySchedule::notOver($q))->orderBy('starts_at')->limit(3)->get(),
             'services' => $this->public->published('layanan')->orderBy('title')->limit(4)->get(),
             'news' => $this->public->published('berita')->orderByDesc('published_at')->limit(3)->get(),
         ], fn (StructuredData $s) => $s->site());

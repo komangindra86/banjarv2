@@ -55,6 +55,11 @@ Route::middleware(['access:tenant', 'module:ACTIVITY,ACTIVE', 'module:KRAMA'])->
 
 // Beranda degrades per card: reachable with only KRAMA active, each summary hidden if its own module/permission is missing.
 Route::middleware(['access:tenant', 'module:KRAMA'])->get('/portal/beranda', [PortalController::class, 'home']);
+// §53: pengumuman Banjar untuk warga di portal (isi sama dengan halaman Pengumuman website).
+Route::prefix('portal')->middleware(['access:tenant,krama.self', 'module:KRAMA', 'module:WEBSITE'])->group(function () {
+    Route::get('/pengumuman', [PortalController::class, 'announcements']);
+    Route::get('/pengumuman/{slug}', [PortalController::class, 'announcement'])->where('slug', '[a-z0-9-]+');
+});
 // §53: informasi untuk warga — laporan kas per periode sangkep dan riwayat pembayaran (tunai & QRIS).
 Route::prefix('portal')->middleware(['access:tenant,krama.self', 'module:KRAMA', 'module:FINANCE'])->group(function () {
     Route::get('/laporan', [PortalInfoController::class, 'reports']);

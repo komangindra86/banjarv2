@@ -162,6 +162,16 @@ class WebsiteTest extends TestCase
         $this->get($this->host.'/berita')->assertOk()->assertSee(ContentCatalog::TYPES['berita']['lead']);
     }
 
+    // Kegiatan yang dimulai hari ini dan belum selesai tetap di "Kegiatan terdekat"; yang kemarin atau sudah selesai tidak.
+    public function test_home_lists_activities_that_are_not_over(): void
+    {
+        $this->content('agenda', ['title' => 'Sedang berlangsung', 'slug' => 'berlangsung', 'visibility' => 'PUBLIC', 'starts_at' => now()->subMinutes(5)]);
+        $this->content('agenda', ['title' => 'Sudah selesai', 'slug' => 'selesai', 'visibility' => 'PUBLIC', 'starts_at' => now()->subHours(2), 'ends_at' => now()->subHour()]);
+        $this->content('agenda', ['title' => 'Kemarin', 'slug' => 'kemarin', 'visibility' => 'PUBLIC', 'starts_at' => now('Asia/Makassar')->subDay()->startOfDay()->addHours(9)->utc()]);
+        $this->content('agenda', ['title' => 'Besok', 'slug' => 'besok', 'visibility' => 'PUBLIC', 'starts_at' => now()->addDay()]);
+        $this->get($this->host.'/')->assertOk()->assertSeeInOrder(['Kegiatan terdekat', 'Sedang berlangsung', 'Besok'])->assertDontSee('Sudah selesai')->assertDontSee('>Kemarin<', false);
+    }
+
     public function test_public_pages_show_only_current_tenant_and_escape_content(): void
     {
         $this->content('pengumuman', ['title' => 'Kabar Alpha', 'body' => '<script>alert(1)</script>']);

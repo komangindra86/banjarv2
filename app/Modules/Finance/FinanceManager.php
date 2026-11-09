@@ -2,6 +2,7 @@
 
 namespace App\Modules\Finance;
 
+use App\Modules\Notification\NotifyWarga;
 use App\Models\User;
 use App\Modules\Notification\NotificationManager;
 use App\Platform\Audit\Audit;
@@ -500,6 +501,8 @@ final class FinanceManager
             });
             $this->query->table('billing_events')->where('id', $id)->update(['status' => 'ISSUED', 'issued_at' => now(), 'updated_at' => now()]);
             $this->audit($actor, 'billing.issued', 'billing_events', $id, ['status' => 'ISSUED', 'amount' => $event->amount]);
+            // Kepala keluarga yang punya akun diberi tahu ada tagihan baru (antrean; tanpa nominal di layar kunci).
+            NotifyWarga::dispatch('bills', $this->tenant->id(), $id)->afterCommit();
         });
     }
 

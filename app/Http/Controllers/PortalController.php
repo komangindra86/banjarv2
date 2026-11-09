@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Modules\Activity\ActivitySchedule;
+use App\Modules\Website\PublicContent;
 use App\Modules\Portal\PortalInfoManager;
 use App\Modules\Portal\PortalManager;
 use App\Platform\Identity\Access;
@@ -35,11 +37,11 @@ final class PortalController extends Controller
         $activity = $canActivity ? $this->query->table('activity_participants')->join('activities as a', 'a.id', '=', 'activity_participants.activity_id')
             ->where(fn ($q) => $q->where('activity_participants.krama_id', $self->id)
                 ->orWhere(fn ($q) => $q->where('activity_participants.basis', 'HOUSEHOLD')->where('activity_participants.household_id', $self->household_id)))
-            ->where('a.status', '<>', 'ARCHIVED')->where('a.attendance_status', '<>', 'NONE')->where('a.starts_at', '>=', now())
+            ->where('a.status', '<>', 'ARCHIVED')->where('a.attendance_status', '<>', 'NONE')->tap(fn ($q) => ActivitySchedule::notOver($q, 'a'))
             ->orderBy('a.starts_at')->select('a.title', 'a.starts_at', 'a.location')->first() : null;
         // Tanpa presensi untuk KK ini, tetap tampilkan kegiatan Banjar terdekat dari jadwal.
         $activity ??= $canActivity ? $this->query->table('activities')->where('status', 'PUBLISHED')->where('published_at', '<=', now())
-            ->where('visibility', 'PUBLIC')->where('starts_at', '>=', now())
+            ->where('visibility', 'PUBLIC')->tap(fn ($q) => ActivitySchedule::notOver($q))
             ->orderBy('starts_at')->select('title', 'starts_at', 'location')->first() : null;
 
         $canLetter = $this->gate->allows('ADMINISTRATION') && $this->access->tenant($user, 'letter.submit');
@@ -50,7 +52,37 @@ final class PortalController extends Controller
         $report = $canFinance ? app(PortalInfoManager::class)->reports()->first() : null;
         $lastPayment = $canFinance && $self ? app(PortalInfoManager::class)->payments($self)->first() : null;
 
-        return view('portal.home', compact('self', 'canBill', 'bill', 'canActivity', 'activity', 'canLetter', 'pendingLetters', 'canFinance', 'report', 'lastPayment'));
+        // Pengumuman yang sedang berlaku (sama dengan website Banjar): yang Penting di atas.
+        $announcements = $this->gate->allows('WEBSITE') ? $this->announcementQuery()->limit(3)->get() : collect();
+
+        // Ajakan mengaktifkan push di HP (hanya bila push dikonfigurasi dan warga bisa membuka Notifikasi).
+        $vapidPublicKey = config('webpush.enabled') && $this->gate->allows('NOTIFICATION') && $this->access->tenant($user, 'dashboard.view') ? config('webpush.public_key') : null;
+
+        return view('portal.home', compact('self', 'canBill', 'bill', 'canActivity', 'activity', 'canLetter', 'pendingLetters', 'canFinance', 'report', 'lastPayment', 'announcements', 'vapidPublicKey'));
+    }
+
+    // Pengumuman Banjar untuk warga di portal; isinya sama dengan halaman Pengumuman website (yang sedang berlaku).
+    public function announcements()
+    {
+        return view('portal.announcements', ['items' => $this->announcementQuery()->paginate(12)]);
+    }
+
+    public function announcement(string $slug, PublicContent $public)
+    {
+        $item = $public->published('pengumuman', false)->where('slug', $slug)->first();
+        abort_unless($item, 404);
+        $photos = $this->query->table('content_photos')->where('content_type', 'pengumuman')->where('content_id', $item->id)
+            ->where('media_id', '!=', $item->media_id ?? 0)->orderBy('sort_order')->pluck('media_id');
+        $related = $item->related_activity_id && $this->gate->allows('ACTIVITY')
+            ? $public->published('agenda')->where('id', $item->related_activity_id)->first(['id', 'title', 'starts_at', 'location']) : null;
+
+        return view('portal.announcement', compact('item', 'photos', 'related') + ['publicContent' => $public]);
+    }
+
+    private function announcementQuery()
+    {
+        return app(PublicContent::class)->published('pengumuman')->orderByRaw("priority = 'IMPORTANT' desc")->orderByDesc('published_at')
+            ->select('id', 'title', 'slug', 'body', 'priority', 'published_at', 'media_id');
     }
 
     // §53: portal pusat — warga dengan lebih dari satu Banjar memilih Banjar yang dibuka.

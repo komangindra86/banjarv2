@@ -93,6 +93,8 @@ class DemoResetTest extends TestCase
         Artisan::call('demo:reset');
 
         $this->assertSame(['Pengumuman awal'], DB::table('announcements')->where('banjar_id', $this->demo)->pluck('title')->all());
+        // Konten awal demo tidak diumumkan ulang ke warga demo setiap malam.
+        $this->assertSame(0, DB::table('announcements')->where('banjar_id', $this->demo)->whereNull('notified_at')->count());
         $this->assertSame([$baselinePhoto], DB::table('media_files')->where('banjar_id', $this->demo)->pluck('id')->map(fn ($id) => (int) $id)->all());
         Storage::disk('local')->assertMissing($reviewerFile);
         Storage::disk('local')->assertExists('banjars/'.$this->demo.'/media/awal.webp');
