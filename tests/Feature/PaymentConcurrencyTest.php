@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Modules\Finance\FinanceManager;
 use App\Modules\Payment\LedgerService;
-use App\Modules\Payment\SettlementManager;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -92,19 +91,14 @@ class PaymentConcurrencyTest extends TestCase
         $this->assertSame(['SUCCESS', 'SUCCESS'], $this->race($sync, $sync));
         $this->assertDatabaseCount('bill_settlements', 1);
         $this->assertDatabaseCount('financial_ledger_transactions', 1);
-        $admins = [];
-        foreach ([1, 2] as $i) {
-            $admins[] = $admin = User::factory()->create();
-            DB::table('platform_role_assignments')->insert(['user_id' => $admin->id, 'role_id' => DB::table('roles')->where('code', 'SUPER_ADMIN')->value('id')]);
-        }
-        app(SettlementManager::class)->submit($admins[0], $id, ['reference' => 'Bank evidence concurrency test', 'gateway_fee' => 350, 'settled_at' => now('Asia/Makassar')->format('Y-m-d\TH:i')]);
-        app(SettlementManager::class)->approve($admins[1], $id);
+        // Worker memakai masa tahan 0 hari: dua pelepasan bersamaan hanya memindahkan nilai tagihan sekali.
         $release = $base + ['action' => 'payment-release', 'id' => $id];
         $this->assertSame(['SUCCESS', 'SUCCESS'], $this->race($release, $release));
         $ledger = app(LedgerService::class);
-        $this->assertSame(49650, $ledger->balance($fixture['tenant'], 'AVAILABLE'));
+        $this->assertSame(50000, $ledger->balance($fixture['tenant'], 'AVAILABLE'));
         $this->assertSame(0, $ledger->balance($fixture['tenant'], 'PENDING'));
-        $this->assertDatabaseCount('financial_ledger_transactions', 3);
+        $this->assertSame(1750, $ledger->balance($fixture['tenant'], 'PLATFORM'));
+        $this->assertDatabaseCount('financial_ledger_transactions', 2);
 
         $bill2 = DB::table('bills')->where('status', 'UNPAID')->orderBy('id')->value('id');
         $create2 = ['action' => 'payment-create', 'id' => $bill2, 'actor' => FinanceFixture::payer($fixture['tenant'], $bill2)->id] + $base;

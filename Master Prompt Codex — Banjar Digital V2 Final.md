@@ -990,7 +990,7 @@ Petengen cukup mengisi **nama sangkep** dan **tanggal sangkep**; sistem menentuk
 - selama masih ada draf laporan, laporan baru tidak dapat dibuat; sebelum final, draf dapat diubah nama/tanggal sangkepnya (periode dan saldo pindahan dihitung ulang) atau dibatalkan (draf dihapus, buku kas tidak berubah). Draf versi koreksi hanya dapat diganti namanya; membatalkannya memulihkan versi final sebelumnya;
 - nama penanda tangan diisi otomatis dari akun Petengen (yang memfinalkan) dan Kelian Adat aktif, dapat diubah sebelum finalisasi.
 - pelunasan tagihan yang tidak diberi kategori dikelompokkan otomatis per jenis tagihan ("Pembayaran Iuran", "Pembayaran Patus", "Pembayaran Dedosan", "Pembayaran Lainnya") dan diringkas satu baris per event tagihan ("Iuran November · 12 KK"), sehingga laporan tidak berisi ratusan baris per KK; pembalikan pelunasan mengurangi ringkasan yang sama, bukan tampil sebagai pengeluaran.
-- pembayaran QRIS warga ikut dihitung sebagai pendapatan pada kelompok yang sama (tunai + QRIS per event); pembayaran QRIS ganda/selisih tampil terpisah "perlu dicek"; biaya layanan QRIS tampil sebagai pengeluaran "Biaya layanan QRIS"; dana QRIS yang belum dicairkan tampil di Posisi Dana dan termasuk saldo laporan;
+- pembayaran QRIS warga ikut dihitung sebagai pendapatan sebesar nilai tagihan pada kelompok yang sama (tunai + QRIS per event); pembayaran QRIS ganda/selisih tampil terpisah "perlu dicek"; biaya layanan QRIS dibayar warga dan menjadi pendapatan platform, sehingga tidak tampil di laporan Banjar; dana QRIS yang belum dicairkan tampil di Posisi Dana dan termasuk saldo laporan;
 - pencairan dana QRIS yang sudah ditransfer dicatat otomatis di buku kas sebagai pemindahan (sumber TRANSFER) ke rekening bank Banjar (rekening dibuat otomatis bila belum ada) — bukan pendapatan, tidak dapat dibalik, dan Petengen tidak perlu mencatatnya manual.
 
 Definisikan batas penutupan secara eksplisit. Jika laporan sebelumnya dan transaksi berikutnya berada pada tanggal yang sama, simpan batas transaksi/keanggotaan periode yang stabil agar tidak ada transaksi terlewat atau masuk dua laporan. Jangan menebak batas hanya dari judul bulan atau tanggal saldo pindahan.
@@ -1232,7 +1232,7 @@ Hak penetapan iuran/patus dan dedosan tidak diberikan kepada Petengen hanya kare
 Setiap tagihan iuran/patus maupun dedosan dapat dibayar melalui:
 
 1. **Tunai/cash:** warga datang membayar tunai ke Petengen. Petengen membuka **Keuangan → Tagihan** (tabel yang secara bawaan hanya menampilkan tagihan belum lunas, dapat dicari dengan nama kepala keluarga/kode KK dan disaring per jenis), menekan **Lunas** pada baris warga tersebut, lalu mengonfirmasi, dan selesai. Tanggal penerimaan = hari ini dan nomor bukti dibuat server (`TUNAI-[KK]-[id]`); kas penerima dipilih sekali di atas daftar bila ada lebih dari satu kas. Sistem melunasi tagihan dan membuat satu transaksi pemasukan secara atomik; `submission_key` per baris membuat klik ganda tidak tercatat dua kali. Formulir pelunasan lengkap di halaman rincian tagihan tetap tersedia untuk kasus khusus (kategori, tanggal lain, nomor kuitansi).
-2. **QRIS melalui portal warga saja:** warga melihat tagihan yang berhak diaksesnya, memilih Bayar QRIS, dan membayar melalui Midtrans. Pengurus (termasuk Petengen) tidak membuat QRIS atas nama warga dan tidak melihat tombol QRIS di halaman tagihan pengurus; izin `payment.create` tidak diberikan ke peran pengurus. Backend memvalidasi webhook/status provider, melunasi tagihan, dan mencatat ledger sesuai aturan payment. Jangan meminta Petengen mencatat pemasukan manual kedua untuk pembayaran yang sama.
+2. **QRIS melalui portal warga saja:** warga melihat tagihan yang berhak diaksesnya, memilih Bayar QRIS, dan membayar melalui iPaymu. Warga membayar nilai tagihan + **biaya layanan 3,5%** (dibulatkan ke atas per rupiah, ditampilkan sebelum membayar); Banjar menerima nilai tagihan **utuh**; biaya layanan dikurangi biaya iPaymu menjadi pendapatan platform. Bayar tunai ke Petengen tanpa biaya. Nilai tagihan ditahan `PAYMENT_SETTLEMENT_HOLD_DAYS` hari (bawaan 2) setelah lunas, lalu otomatis tersedia untuk dicairkan setelah status iPaymu diperiksa ulang. Pengurus (termasuk Petengen) tidak membuat QRIS atas nama warga dan tidak melihat tombol QRIS di halaman tagihan pengurus; izin `payment.create` tidak diberikan ke peran pengurus. Backend memvalidasi webhook/status provider, melunasi tagihan, dan mencatat ledger sesuai aturan payment. Jangan meminta Petengen mencatat pemasukan manual kedua untuk pembayaran yang sama.
 
 Penetapan tagihan belum berarti penerimaan uang. Pisahkan status tagihan, metode pembayaran, bukti penerimaan, dan status dana tersedia. Kedua metode harus menampilkan status pelunasan yang konsisten kepada Kesinoman, Petengen, dan warga sesuai hak akses masing-masing.
 
@@ -1243,6 +1243,8 @@ Jika dana QRIS ternyata diterima setelah pelunasan tunai karena race atau notifi
 ---
 
 # 30. MIDTRANS SEBAGAI PAYMENT GATEWAY
+
+> **Keputusan Product Owner 9 November 2026:** penyedia QRIS adalah **iPaymu** (akun Bali Santih yang juga dipakai aplikasi undangan), bukan Midtrans. Implementasi: `IpaymuPaymentGateway` di balik `PaymentGatewayInterface`; callback `POST /webhooks/ipaymu` di alamat platform hanya penunjuk — status lunas selalu dibaca ulang dari API iPaymu. Penyebutan Midtrans di bagian ini dan bagian lain dibaca sebagai "penyedia QRIS (iPaymu)"; aturan keamanannya (idempotency, status dari server, tanpa kredit ganda) tetap berlaku.
 
 Untuk V1 gunakan **Midtrans** sebagai payment gateway.
 
@@ -1687,13 +1689,7 @@ platform_fee
 net_amount
 ```
 
-Untuk sekarang:
-
-```text
-platform_fee = 0
-```
-
-kecuali Product Owner mengubah kebijakan.
+Kebijakan saat ini (Product Owner, 9 November 2026): **biaya layanan QRIS 3,5% dibayar warga** (`service_fee`, `PAYMENT_SERVICE_FEE_PERCENT`), dibulatkan ke atas per rupiah. `gross_amount` = tagihan + biaya layanan; `net_amount` = nilai tagihan (diterima Banjar utuh); `gateway_fee` = biaya iPaymu; `platform_fee` = biaya layanan − biaya iPaymu (kantong ledger `PLATFORM`). Pembayaran tunai ke Petengen tanpa biaya. Biaya layanan bukan pendapatan Banjar dan tidak masuk laporan kas Banjar.
 
 Jangan hardcode model bisnis berbayar.
 

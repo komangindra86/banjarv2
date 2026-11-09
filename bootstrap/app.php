@@ -20,7 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prepend(EnableRequestMemo::class);
         $middleware->append(PrivateResponse::class);
         $middleware->web(prepend: [ResolveBanjar::class], append: [ResolvePortalBanjar::class]);
-        $middleware->validateCsrfTokens(except: ['webhooks/midtrans']);
+        $middleware->validateCsrfTokens(except: ['webhooks/ipaymu']);
         $middleware->alias([
             'access' => RequireAccess::class,
             'module' => RequireModule::class,

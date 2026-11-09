@@ -87,12 +87,12 @@ class WithdrawalConcurrencyTest extends TestCase
         $base = ['tenant' => $tenant, 'actor' => $petengen->id];
 
         // Leave exactly 100.000 available, then two parallel 80.000 requests: only one may reserve.
-        $manager->request($petengen, ['amount' => '48950', 'submission_key' => (string) Str::uuid()]);
+        $manager->request($petengen, ['amount' => '50000', 'submission_key' => (string) Str::uuid()]);
         $this->assertSame(100000, $ledger->balance($tenant, 'AVAILABLE'));
         $request = fn () => $base + ['action' => 'withdraw-request', 'input' => ['amount' => '80000', 'submission_key' => (string) Str::uuid()]];
         $this->assertSame(['REJECTED', 'SUCCESS'], $this->race($request(), $request()));
         $this->assertSame(20000, $ledger->balance($tenant, 'AVAILABLE'));
-        $this->assertSame(128950, $ledger->balance($tenant, 'RESERVED'));
+        $this->assertSame(130000, $ledger->balance($tenant, 'RESERVED'));
         $big = (int) DB::table('withdrawals')->where('amount', 80000)->value('id');
 
         // Same idempotency key submitted twice in parallel creates one withdrawal.
@@ -117,6 +117,6 @@ class WithdrawalConcurrencyTest extends TestCase
         $this->assertSame(1, DB::table('financial_ledger_transactions')->where('withdrawal_id', $big)->whereIn('type', ['paid', 'release'])->count());
         $this->assertSame([], $manager->invariants($tenant));
         $this->assertGreaterThanOrEqual(0, $ledger->balance($tenant, 'AVAILABLE'));
-        $this->assertSame(148950, $ledger->balance($tenant, 'AVAILABLE') + $ledger->balance($tenant, 'RESERVED') + $ledger->balance($tenant, 'PAID_OUT'));
+        $this->assertSame(150000, $ledger->balance($tenant, 'AVAILABLE') + $ledger->balance($tenant, 'RESERVED') + $ledger->balance($tenant, 'PAID_OUT'));
     }
 }

@@ -155,7 +155,7 @@ final class FinanceReportManager
     /**
      * Dana QRIS yang masih dipegang (belum dicairkan ke rekening Banjar) per waktu tertentu: saldo kantong PENDING,
      * AVAILABLE, RESERVED, dan EXCEPTION di buku besar pembayaran. Yang sudah dicairkan (PAID_OUT) tercatat di buku kas
-     * sebagai pemindahan ke rekening bank; biaya layanan (FEE) adalah pengeluaran.
+     * sebagai pemindahan ke rekening bank. Kantong PLATFORM dan FEE (biaya layanan & biaya iPaymu) milik platform.
      */
     private function qrisBalance(Carbon $asOfUtc): int
     {
@@ -187,17 +187,14 @@ final class FinanceReportManager
         $billTx = $lines->filter(fn ($line) => $line['source'] === 'BILL' && $line['category_id'] === null);
         $reversedBillTx = $lines->filter(fn ($line) => $line['source'] === 'REVERSAL' && $line['category_id'] === null)
             ->filter(fn ($line) => $this->query->table('cash_transactions')->where('id', $line['reversal_of_id'])->where('source', 'BILL')->whereNull('category_id')->exists());
-        // Pembayaran QRIS warga (buku besar pembayaran) masuk kelompok yang sama dengan pembayaran tunai.
+        // Pembayaran QRIS warga (buku besar pembayaran) masuk kelompok yang sama dengan pembayaran tunai, sebesar nilai
+        // tagihan (bagian Banjar). Biaya layanan dibayar warga dan menjadi pendapatan platform, bukan uang Banjar.
         $fromUtc = Carbon::parse($report->period_from, 'Asia/Makassar')->startOfDay()->utc();
         $toUtc = Carbon::parse($report->period_to, 'Asia/Makassar')->endOfDay()->utc();
         $qrisReceived = DB::table('financial_ledger_transactions as t')->where('t.banjar_id', $this->tenant->id())->where('t.type', 'received')
             ->whereBetween('t.created_at', [$fromUtc, $toUtc])
             ->join('payments as p', fn ($j) => $j->on('p.id', '=', 't.payment_id')->on('p.banjar_id', '=', 't.banjar_id'))
-            ->orderBy('t.id')->get(['t.id', 't.created_at', 'p.bill_id', 'p.gross_amount', 'p.status']);
-        $qrisFees = DB::table('financial_ledger_entries as e')->join('financial_accounts as a', 'a.id', '=', 'e.account_id')
-            ->join('financial_ledger_transactions as t', 't.id', '=', 'e.transaction_id')
-            ->where('e.banjar_id', $this->tenant->id())->where('a.bucket', 'FEE')->where('e.direction', 'CREDIT')->where('t.type', 'fee')
-            ->whereBetween('t.created_at', [$fromUtc, $toUtc])->get(['e.amount', 't.created_at']);
+            ->orderBy('t.id')->get(['t.id', 't.created_at', 'p.bill_id', 'p.status', DB::raw('COALESCE(p.bill_amount, p.gross_amount) AS banjar_amount')]);
         $billIds = $billTx->pluck('bill_id')->merge($reversedBillTx->map(fn ($line) => $this->query->table('cash_transactions')->where('id', $line['reversal_of_id'])->value('bill_id')))
             ->merge($qrisReceived->pluck('bill_id'))->filter()->unique();
         $billInfo = $this->query->table('bills')->whereIn('bills.id', $billIds)
@@ -223,7 +220,7 @@ final class FinanceReportManager
             $addToEvent((int) $this->query->table('cash_transactions')->where('id', $line['reversal_of_id'])->value('bill_id'), $line, -1);
         }
         foreach ($qrisReceived as $payment) {
-            $line = ['id' => 'qris-'.$payment->id, 'transaction_date' => Carbon::parse($payment->created_at)->timezone('Asia/Makassar')->toDateString(), 'amount' => (int) $payment->gross_amount];
+            $line = ['id' => 'qris-'.$payment->id, 'transaction_date' => Carbon::parse($payment->created_at)->timezone('Asia/Makassar')->toDateString(), 'amount' => (int) $payment->banjar_amount];
             if ($payment->status === 'EXCEPTION') {
                 // Pembayaran ganda/selisih: uangnya diterima tetapi tidak melunasi tagihan; tetap dihitung agar saldo cocok.
                 $kindGroups['OTHER'] ??= ['events' => [], 'subtotal' => 0];
@@ -273,12 +270,8 @@ final class FinanceReportManager
                 $uncategorized[$direction]['subtotal'] += (int) $line['amount'];
             }
         }
-        $feeSections = $qrisFees->isEmpty() ? [] : [['category' => ['id' => null, 'name' => 'Biaya layanan QRIS', 'always_show' => false], 'lines' => [[
-            'id' => 'qris-fee', 'transaction_date' => Carbon::parse($qrisFees->max('created_at'))->timezone('Asia/Makassar')->toDateString(), 'direction' => 'OUT',
-            'amount' => (int) $qrisFees->sum('amount'), 'reason' => Crypt::encryptString('Biaya layanan QRIS · '.$qrisFees->count().' transaksi'),
-        ]], 'subtotal' => (int) $qrisFees->sum('amount')]];
-        $section = function (string $direction) use ($groups, $uncategorized, $billSections, $feeSections) {
-            $out = $direction === 'IN' ? $billSections : $feeSections;
+        $section = function (string $direction) use ($groups, $uncategorized, $billSections) {
+            $out = $direction === 'IN' ? $billSections : [];
             foreach ($groups[$direction] as $entry) {
                 if (empty($entry['lines']) && ! $entry['category']['always_show']) {
                     continue;
@@ -294,8 +287,8 @@ final class FinanceReportManager
 
         // Pembalikan pelunasan sudah mengurangi ringkasan pemasukannya, jadi tidak dihitung lagi sebagai pengeluaran.
         $reversedTotal = (int) $reversedBillTx->sum('amount');
-        $totalMasuk = (int) $lines->where('direction', 'IN')->sum('amount') - $reversedTotal - (int) $transferTx->sum('amount') + (int) $qrisReceived->sum('gross_amount');
-        $totalKeluar = (int) $lines->where('direction', 'OUT')->sum('amount') - $reversedTotal + (int) $qrisFees->sum('amount');
+        $totalMasuk = (int) $lines->where('direction', 'IN')->sum('amount') - $reversedTotal - (int) $transferTx->sum('amount') + (int) $qrisReceived->sum('banjar_amount');
+        $totalKeluar = (int) $lines->where('direction', 'OUT')->sum('amount') - $reversedTotal;
         $opening = (int) $report->opening_balance;
         $saldoAkhir = $opening + $totalMasuk - $totalKeluar;
 

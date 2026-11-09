@@ -25,15 +25,10 @@ $data = json_decode(base64_decode($argv[1]), true, 512, JSON_THROW_ON_ERROR);
 app(CurrentBanjar::class)->set(DB::table('banjars')->find($data['tenant']));
 $actor = User::findOrFail($data['actor']);
 if (str_starts_with($data['action'], 'payment-')) {
-    config(['payment.enabled' => true, 'payment.server_key' => 'race-key', 'payment.merchant_id' => 'RACE', 'payment.production' => false, 'payment.settlement_hold_days' => 0]);
-    Http::preventStrayRequests();
-    Http::fake(function ($request) {
-        $order = $request->method() === 'POST' ? $request['transaction_details']['order_id'] : basename(dirname(parse_url($request->url(), PHP_URL_PATH)));
-        $p = DB::table('payments')->where('order_id', $order)->firstOrFail();
-
-        return Http::response(['order_id' => $order, 'transaction_id' => 'race-'.$p->id, 'merchant_id' => 'RACE', 'payment_type' => 'qris', 'currency' => 'IDR', 'gross_amount' => $p->gross_amount.'.00',
-            'transaction_status' => $request->method() === 'POST' ? 'pending' : 'settlement', 'status_code' => '200', 'fraud_status' => 'accept']);
-    });
+    \Tests\Support\IpaymuFake::configure(['payment.settlement_hold_days' => 0]);
+    $fake = new \Tests\Support\IpaymuFake;
+    $fake->defaultStatus = 1;
+    $fake->install();
 }
 $proof = null;
 if ($data['action'] === 'withdraw-paid') {

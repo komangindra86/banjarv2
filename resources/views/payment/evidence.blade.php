@@ -1,12 +1,18 @@
 @extends('layouts.app')
-@section('title', 'Bukti settlement')
+@section('title', 'Pembayaran QRIS #'.$payment->id)
 @section('content')
-<div class="page-heading"><div><a class="text-link" href="/platform/payments">← Rekonsiliasi QRIS</a><h1 class="mt-3">Bukti settlement</h1><p class="muted">Pembayaran #{{ $payment->id }} · {{ \App\Modules\Payment\PaymentManager::STATUSES[$payment->status] }}</p></div></div>
-<section class="card form-width form-stack mb-6"><h2>{{ \App\Modules\Finance\FinanceManager::money($payment->gross_amount) }}</h2><p class="help break-all">{{ $payment->order_id }}</p><p>Masa tunggu: {{ $payment->hold_days === null ? 'Belum ditetapkan; dana tetap pending' : $payment->hold_days.' hari kalender setelah settlement' }}</p>@if($payment->blocked)<p class="error-box">Pembayaran ditahan untuk pemeriksaan. Tidak dapat dirilis.</p>@endif @if($payment->released_at)<p class="notice">Dana telah masuk saldo tersedia pada {{ \Carbon\Carbon::parse($payment->released_at)->timezone('Asia/Makassar')->translatedFormat('d M Y, H:i') }} WITA.</p>@endif</section>
-@if($evidence)
-<section class="card form-width form-stack"><h2>Bukti tercatat</h2><p class="whitespace-pre-wrap break-words">{{ \Illuminate\Support\Facades\Crypt::decryptString($evidence->reference) }}</p><p>Biaya gateway: {{ \App\Modules\Finance\FinanceManager::money($evidence->gateway_fee) }}</p><p>Settlement: {{ \Carbon\Carbon::parse($evidence->settled_at)->timezone('Asia/Makassar')->format('d/m/Y H:i') }} WITA</p>
-@if($evidence->approved_at)<p class="notice">Disetujui oleh pemeriksa #{{ $evidence->approved_by }}.</p>@elseif($evidence->submitted_by !== auth('platform')->id() && !$payment->blocked)<form method="post" action="/platform/payments/{{ $payment->id }}/approve">@csrf<p class="help mb-4">Cocokkan referensi dan biaya dengan laporan settlement provider atau bank sebelum menyetujui.</p><button class="button">Bukti sudah sesuai, setujui</button></form>@else<p class="notice">Menunggu pemeriksaan Super Admin lain.</p>@endif</section>
-@elseif($payment->status === 'PAID' && !$payment->blocked && $payment->hold_days !== null)
-<form class="card form-stack form-width" method="post" action="/platform/payments/{{ $payment->id }}/evidence">@csrf<h2>Catat bukti penerimaan dana</h2><p class="help">Gunakan referensi laporan settlement provider atau penerimaan bank yang dapat diverifikasi. Status pembayaran sukses saja belum menjadi bukti dana tersedia.</p><label>Referensi bukti dan keterangan<textarea name="reference" minlength="10" maxlength="1000" required rows="4"></textarea></label><label>Biaya gateway aktual (rupiah)<input name="gateway_fee" inputmode="numeric" pattern="[0-9]+" required value="{{ old('gateway_fee') }}"></label><label>Waktu settlement (WITA)<input type="datetime-local" name="settled_at" required max="{{ now('Asia/Makassar')->format('Y-m-d\TH:i') }}" value="{{ old('settled_at') }}"></label><button class="button">Simpan untuk diperiksa</button></form>
-@endif
+@php($money = fn ($v) => \App\Modules\Finance\FinanceManager::money($v))
+<div class="page-heading"><div><a class="text-link" href="/platform/payments">← Rekonsiliasi QRIS</a><h1 class="mt-3">Pembayaran #{{ $payment->id }}</h1><p class="muted">{{ $payment->banjar_name }} · Tagihan #{{ $payment->bill_id }} · {{ \App\Modules\Payment\PaymentManager::STATUSES[$payment->status] }}{{ $payment->blocked ? ' · ditahan untuk pemeriksaan' : '' }}</p></div></div>
+<section class="card form-width mb-6">
+<table class="data-table"><tbody>
+<tr><td>Dibayar warga</td><td class="text-right">{{ $money($payment->gross_amount) }}</td></tr>
+<tr><td>Untuk Banjar (nilai tagihan)</td><td class="text-right">{{ $money($payment->bill_amount ?? $payment->gross_amount) }}</td></tr>
+<tr><td>Biaya layanan (platform)</td><td class="text-right">{{ $money($payment->service_fee) }}</td></tr>
+<tr><td>Biaya iPaymu</td><td class="text-right">{{ $payment->gateway_fee === null ? 'belum diketahui' : $money($payment->gateway_fee) }}</td></tr>
+<tr><td><strong>Pendapatan platform</strong></td><td class="text-right"><strong>{{ $money(max(0, (int) $payment->service_fee - (int) $payment->gateway_fee)) }}</strong></td></tr>
+</tbody></table>
+<p class="help mt-4 break-all">Referensi: {{ $payment->order_id }} · Transaksi iPaymu: {{ $payment->provider_transaction_id ?? '—' }}</p>
+<p class="help mt-2">Masa tahan: {{ $payment->hold_days === null ? 'belum ditetapkan (dana tetap tertahan)' : $payment->hold_days.' hari' }}@if($payment->available_at) · tersedia {{ \Carbon\Carbon::parse($payment->available_at)->timezone('Asia/Makassar')->translatedFormat('d M Y, H:i') }} WITA @endif @if($payment->released_at)· sudah dapat dicairkan Banjar @endif</p>
+</section>
+@if($items->isNotEmpty())<section class="card form-width"><h2>Catatan pemeriksaan</h2>@foreach($items as $item)<p class="mt-3">{{ $item->code }} · {{ $item->status }} · {{ \Carbon\Carbon::parse($item->created_at)->timezone('Asia/Makassar')->translatedFormat('d M Y, H:i') }} WITA</p>@endforeach</section>@endif
 @endsection

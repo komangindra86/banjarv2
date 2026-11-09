@@ -29,6 +29,12 @@ window.addEventListener('pageshow', () => {
     });
 });
 
+// QRIS iPaymu dikirim sebagai teks (QrString); gambar QR-nya dibuat di sini.
+document.querySelectorAll('canvas[data-qris]').forEach((canvas) => {
+    import('qrcode').then(({ default: QRCode }) => QRCode.toCanvas(canvas, canvas.dataset.qris, { width: 288, margin: 2, errorCorrectionLevel: 'M' }))
+        .catch(() => canvas.insertAdjacentHTML('afterend', '<p class="error-box">QR belum dapat ditampilkan. Muat ulang halaman.</p>'));
+});
+
 document.querySelectorAll('.qr-canvas').forEach((qrCanvas) => {
     const scope = qrCanvas.closest('section') ?? document;
     import('qrcode').then(async ({ default: QRCode }) => {

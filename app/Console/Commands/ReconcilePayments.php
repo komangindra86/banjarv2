@@ -13,7 +13,7 @@ final class ReconcilePayments extends Command
 {
     protected $signature = 'payments:reconcile {--limit=100 : Maximum payments and receipts per run}';
 
-    protected $description = 'Retry durable receipts, reconcile provider status and release evidenced gateway funds';
+    protected $description = 'Proses ulang callback iPaymu, periksa status pembayaran, dan lepas dana Banjar setelah masa tahan';
 
     public function handle(PaymentManager $manager, SettlementManager $settlements): int
     {
@@ -68,7 +68,7 @@ final class ReconcilePayments extends Command
             }
             if ($payment->status === 'PAID') {
                 $settlement = DB::table('bill_settlements')->where('payment_id', $payment->id)->whereNull('reversed_at')->first();
-                $valid = $valid && $settlement && (int) $settlement->amount === (int) $payment->gross_amount && DB::table('bills')->where('id', $payment->bill_id)->value('status') === 'PAID';
+                $valid = $valid && $settlement && (int) $settlement->amount === (int) ($payment->bill_amount ?? $payment->gross_amount) && DB::table('bills')->where('id', $payment->bill_id)->value('status') === 'PAID';
             }
             if (! $valid) {
                 app(PaymentManager::class)->flagIntegrity($payment->id);

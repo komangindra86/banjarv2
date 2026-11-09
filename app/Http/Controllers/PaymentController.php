@@ -6,7 +6,6 @@ use App\Modules\Payment\LedgerService;
 use App\Modules\Payment\PaymentAccess;
 use App\Modules\Payment\PaymentManager;
 use App\Modules\Payment\ProcessPaymentReceipt;
-use App\Modules\Payment\SettlementManager;
 use App\Platform\Tenancy\CurrentBanjar;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -56,23 +55,24 @@ final class PaymentController extends Controller
     {
         $this->access->authorize($request->user(), 'payment.view');
         $balances = [];
-        foreach (['PENDING', 'AVAILABLE', 'RESERVED', 'PAID_OUT', 'FEE', 'EXCEPTION'] as $bucket) {
+        foreach (['PENDING', 'AVAILABLE', 'RESERVED', 'PAID_OUT', 'EXCEPTION'] as $bucket) {
             $balances[$bucket] = $ledger->balance($this->tenant->id(), $bucket);
         }
         $payments = DB::table('payments')->where('banjar_id', $this->tenant->id())->orderByDesc('id')->paginate(20);
         $entries = DB::table('financial_ledger_entries as e')->join('financial_accounts as a', 'a.id', '=', 'e.account_id')
             ->join('financial_ledger_transactions as t', 't.id', '=', 'e.transaction_id')->where('e.banjar_id', $this->tenant->id())
+            ->whereIn('a.bucket', ['PENDING', 'AVAILABLE', 'RESERVED', 'PAID_OUT', 'EXCEPTION'])
             ->select('e.*', 'a.bucket', 't.type', 't.payment_id', 't.withdrawal_id')->orderByDesc('e.id')->limit(50)->get();
 
         return view('payment.ledger', compact('balances', 'payments', 'entries'));
     }
 
+    // notifyUrl iPaymu (dikirim ke alamat platform). Isinya hanya penunjuk; status dibaca ulang dari API iPaymu.
     public function webhook(Request $request)
     {
         abort_unless($request->attributes->get('platform'), 404);
         abort_if(strlen($request->getContent()) > 32768, 413);
-        abort_unless($request->isJson(), 415);
-        $id = $this->manager->receive($request->json()->all());
+        $id = $this->manager->receive($request->only(['trx_id', 'reference_id', 'status']));
         try {
             ProcessPaymentReceipt::dispatch($id);
         } catch (Throwable) {
@@ -87,30 +87,19 @@ final class PaymentController extends Controller
         $payments = DB::table('payments as p')->join('banjars as b', 'b.id', '=', 'p.banjar_id')->select('p.*', 'b.name as banjar_name')->orderByDesc('p.id')->paginate(25);
         $items = DB::table('reconciliation_items')->where('status', 'OPEN')->orderByDesc('id')->limit(50)->get();
         $run = DB::table('reconciliation_runs')->orderByDesc('id')->first();
+        // Pendapatan layanan QRIS (biaya layanan dikurangi biaya iPaymu) dan biaya iPaymu di seluruh Banjar.
+        $totals = DB::table('financial_ledger_entries as e')->join('financial_accounts as a', 'a.id', '=', 'e.account_id')->whereIn('a.bucket', ['PLATFORM', 'FEE'])
+            ->groupBy('a.bucket')->selectRaw("a.bucket, COALESCE(SUM(CASE WHEN e.direction = 'CREDIT' THEN CAST(e.amount AS SIGNED) ELSE -CAST(e.amount AS SIGNED) END), 0) AS total")->pluck('total', 'bucket');
 
-        return view('payment.platform', compact('payments', 'items', 'run'));
+        return view('payment.platform', compact('payments', 'items', 'run', 'totals'));
     }
 
     public function evidence(int $id)
     {
-        $payment = DB::table('payments')->find($id);
+        $payment = DB::table('payments as p')->join('banjars as b', 'b.id', '=', 'p.banjar_id')->where('p.id', $id)->select('p.*', 'b.name as banjar_name')->first();
         abort_unless($payment, 404);
-        $evidence = DB::table('payment_settlement_evidence')->where('payment_id', $id)->first();
+        $items = DB::table('reconciliation_items')->where('payment_id', $id)->orderByDesc('id')->get();
 
-        return view('payment.evidence', compact('payment', 'evidence'));
-    }
-
-    public function submitEvidence(Request $request, int $id, SettlementManager $settlements)
-    {
-        $settlements->submit($request->user('platform'), $id, $request->all());
-
-        return back()->with('success', 'Bukti tersimpan. Super Admin lain perlu memeriksanya.');
-    }
-
-    public function approveEvidence(Request $request, int $id, SettlementManager $settlements)
-    {
-        $settlements->approve($request->user('platform'), $id);
-
-        return back()->with('success', 'Bukti disetujui. Dana tersedia setelah masa tunggu dan pemeriksaan status berikutnya.');
+        return view('payment.evidence', compact('payment', 'items'));
     }
 }

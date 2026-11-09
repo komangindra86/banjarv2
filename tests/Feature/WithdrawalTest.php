@@ -22,7 +22,7 @@ class WithdrawalTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const AVAILABLE = 148950; // 3 × (50.000 − 350 fee)
+    private const AVAILABLE = 150000; // 3 × 50.000 — Banjar menerima tagihan utuh; biaya layanan dibayar warga
 
     private array $fixture;
 
@@ -302,7 +302,7 @@ class WithdrawalTest extends TestCase
         $this->rejected(fn () => $this->withdrawals->cancel($this->petengen, $id, ['note' => 'Lintas tenant']), 404);
         $this->invalid(fn () => $this->withdrawals->request($this->petengen, ['amount' => '1000', 'submission_key' => (string) Str::uuid()]), 'amount');
 
-        $this->tenantSession($this->kelian)->get($this->host.'/admin/withdrawals')->assertOk()->assertSee('Rp 143.950')->assertDontSee('Ajukan pencairan');
+        $this->tenantSession($this->kelian)->get($this->host.'/admin/withdrawals')->assertOk()->assertSee('Rp 145.000')->assertDontSee('Ajukan pencairan');
         $this->tenantSession($this->petengen)->get($this->host.'/admin/withdrawals/'.$id)->assertOk()->assertHeader('Cache-Control', 'max-age=0, no-store, private')->assertDontSee('0123456789018219');
         $this->tenantSession($this->petengen)->post($this->host.'/admin/withdrawals', ['amount' => '1000', 'submission_key' => (string) Str::uuid()])->assertRedirect();
         $this->platformSession($this->operator)->get('http://admin.banjar.localhost/platform/withdrawals')->assertOk()->assertSee('Banjar Uji Keuangan')->assertDontSee('0123456789018219');
@@ -333,8 +333,8 @@ class WithdrawalTest extends TestCase
         $this->consistent();
     }
 
-    // QRIS sampai laporan: pembayaran warga = pendapatan (dikelompokkan per event), biaya layanan = pengeluaran,
-    // sisa = "Dana QRIS belum dicairkan"; pencairan tercatat otomatis di buku kas sebagai pemindahan, bukan pendapatan.
+    // QRIS sampai laporan: nilai tagihan yang dibayar warga = pendapatan Banjar (dikelompokkan per event), biaya layanan
+    // milik platform (tidak masuk laporan Banjar), sisa = "Dana QRIS belum dicairkan"; pencairan = pemindahan, bukan pendapatan.
     public function test_qris_payments_fees_and_payout_flow_into_the_cash_report(): void
     {
         Storage::fake('local');
@@ -357,12 +357,13 @@ class WithdrawalTest extends TestCase
         $this->assertSame(['Pembayaran Iuran'], $income->keys()->all(), 'Pencairan tidak muncul sebagai pendapatan.');
         $this->assertSame('Iuran September 2026 · 3 KK', \Illuminate\Support\Facades\Crypt::decryptString($income['Pembayaran Iuran']['lines'][0]['reason']));
         $this->assertSame(150000, $income['Pembayaran Iuran']['subtotal']);
-        $fees = $this->balance('FEE');
-        $this->assertSame([150000, $fees], [$data['total_pemasukan'], $data['total_pengeluaran']]);
-        $this->assertSame('Biaya layanan QRIS', $data['pengeluaran'][0]['category']['name']);
-        $this->assertSame(150000 - $fees - 100000, $data['qris_balance']);
+        $this->assertSame([150000, 0], [$data['total_pemasukan'], $data['total_pengeluaran']]);
+        $this->assertSame([], $data['pengeluaran'], 'Biaya layanan QRIS dibayar warga, bukan pengeluaran Banjar.');
+        $this->assertSame(150000 - 100000, $data['qris_balance']);
         // Saldo akhir = uang di buku kas (rekening hasil pencairan) + Dana QRIS yang belum dicairkan.
         $this->assertSame(array_sum(array_column($data['accounts'], 'balance')) + $data['qris_balance'], $data['saldo_akhir']);
-        $this->assertSame(150000 - $fees, $data['saldo_akhir']);
+        $this->assertSame(150000, $data['saldo_akhir']);
+        // Biaya layanan 3 × Rp1.750 tercatat sebagai pendapatan platform.
+        $this->assertSame(3 * 1750, $this->balance('PLATFORM'));
     }
 }

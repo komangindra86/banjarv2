@@ -2,7 +2,7 @@
 
 namespace App\Providers;
 
-use App\Modules\Payment\MidtransPaymentGateway;
+use App\Modules\Payment\IpaymuPaymentGateway;
 use App\Modules\Payment\PaymentGatewayInterface;
 use App\Platform\Identity\Access;
 use App\Platform\Modules\ModuleGate;
@@ -20,7 +20,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(CurrentBanjar::class);
-        $this->app->bind(PaymentGatewayInterface::class, MidtransPaymentGateway::class);
+        $this->app->bind(PaymentGatewayInterface::class, IpaymuPaymentGateway::class);
     }
 
     /**

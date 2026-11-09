@@ -28,7 +28,7 @@ Route::post('/logout', [AuthController::class, 'destroy']);
 Route::get('/manifest.webmanifest', [PwaController::class, 'manifest']);
 Route::get('/brand/{banjar}/{file}', [PwaController::class, 'icon'])->whereNumber('banjar')->where('file', '[a-z0-9-]+\.(png|jpg)');
 
-Route::post('/webhooks/midtrans', [PaymentController::class, 'webhook']);
+Route::post('/webhooks/ipaymu', [PaymentController::class, 'webhook'])->middleware('throttle:120,1');
 Route::middleware(['access:tenant', 'module:PAYMENT', 'module:FINANCE', 'module:KRAMA'])->group(function () {
     Route::get('/payments', [PaymentController::class, 'index']);
     Route::post('/payments/bills/{id}', [PaymentController::class, 'create'])->whereNumber('id')->middleware('throttle:10,1');
@@ -97,8 +97,6 @@ Route::prefix('portal')->middleware(['access:tenant', 'module:ADMINISTRATION', '
 Route::prefix('platform')->middleware('access:platform')->group(function () {
     Route::get('/payments', [PaymentController::class, 'platform']);
     Route::get('/payments/{id}', [PaymentController::class, 'evidence'])->whereNumber('id');
-    Route::post('/payments/{id}/evidence', [PaymentController::class, 'submitEvidence'])->whereNumber('id');
-    Route::post('/payments/{id}/approve', [PaymentController::class, 'approveEvidence'])->whereNumber('id');
     Route::get('/withdrawals', [WithdrawalController::class, 'platform']);
     Route::get('/withdrawals/{id}', [WithdrawalController::class, 'platformShow'])->whereNumber('id');
     Route::post('/withdrawals/{id}/claim', [WithdrawalController::class, 'claim'])->whereNumber('id')->middleware('throttle:20,1');
